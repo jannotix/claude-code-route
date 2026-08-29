@@ -226,10 +226,15 @@ discipline survive contact with real work.
 No model calls, no dependencies, read-only.
 
 ```bash
-node scripts/route-map.mjs .                     # index a repository too large to read
-node scripts/route-lint.mjs docs/route/plans/credit-notes src/
-node scripts/route-history.mjs verify            # the chain is intact
+node scripts/route-map.mjs .                                        # index a large repository
+node scripts/route-lint.mjs docs/route/plans/credit-notes --stage plan
+node scripts/route-lint.mjs docs/route/plans/credit-notes src/      # --stage review, the default
+node scripts/route-history.mjs verify                               # the chain is intact
 ```
+
+`--stage plan | execute | review` says which gate is being checked, because a plan is complete
+before a proof exists. `--layers core,usecase,adapter`, or `{"layers": [...]}` in
+`route.config.json`, replaces the four default layer names for a project that uses its own.
 
 ```
 ERROR  PLAN.md:31  req-unplaced        REQ-001 has no row in Placement; a rule with no named home is not planned
@@ -260,6 +265,30 @@ work is unfinished.
 
 Three claims are never softened: a degraded review is not called a review, a blocked cycle is not
 called progress, and an unproven requirement is not called implemented.
+
+## Evals
+
+`evals/` holds four cases, each measuring one property the skill claims, scored against a no-plugin
+baseline arm:
+
+| Case | Property under test |
+| --- | --- |
+| `plan-gate` | A rule gets a named home before code is written |
+| `proof-gate` | Nothing closes on a read |
+| `depth-scales` | Rigour is proportional to blast radius |
+| `comment-voice` | Comments carry what the code cannot |
+
+```bash
+claude plugin eval claude-code-route
+```
+
+`depth-scales` fails on over-application rather than under-application, and it is in the suite for
+that reason: a discipline that cannot be cheap on a typo gets turned off, and is then absent for the
+migration too.
+
+The suite is **unverified** — `claude plugin eval` is in early access and was unavailable on the
+account it was authored under, so no case here has been executed and the field names follow the
+CLI help rather than a successful run. `evals/README.md` says what would close that.
 
 ## Scope
 

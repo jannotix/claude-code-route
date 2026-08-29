@@ -176,8 +176,12 @@ Detail: [references/execute.md](references/execute.md).
 Freeze the candidate first — the reviewer must judge bytes that cannot move underneath it.
 
 ```bash
-mkdir -p .route && git diff > .route/candidate.patch
+mkdir -p .route && git add -A && git diff --cached > .route/candidate.patch
 ```
+
+**Stage first, and check the patch is not empty.** `git diff` alone omits untracked files, which is
+every file of a new capability: it produces an empty patch, and a reviewer handed an empty patch
+returns a PASS that means nothing. `wc -l .route/candidate.patch` before sending.
 
 ### Who reviews
 
@@ -338,7 +342,8 @@ reports, falling back to `.claude/skills/claude-code-route/scripts/`.
 
 ```bash
 node scripts/route-map.mjs .                          # MAP.md skeleton, no file bodies read
-node scripts/route-lint.mjs docs/route/plans/<slug> src/
+node scripts/route-lint.mjs docs/route/plans/<slug> --stage plan          # at the Plan gate
+node scripts/route-lint.mjs docs/route/plans/<slug> src/                  # at the Review gate
 node scripts/route-history.mjs verify                 # the chain is intact
 ```
 
@@ -347,4 +352,13 @@ home**, **proofs that assert nothing executable**, findings acted on without ver
 gaps, unmeasured non-functional requirements and banned comment patterns. Exit 1 on error, `--json`
 for CI.
 
-`route-history` is the only writer among the three, and it only ever appends.
+**`--stage plan | execute | review`** says which gate is being checked. A plan is complete before a
+proof exists, so run `--stage plan` to close the Plan gate; the default is `review`, which demands
+everything.
+
+**`--layers`** replaces the four default layer names for a project that uses its own, either as
+`--layers core,usecase,adapter` or as `{"layers": [...]}` in `route.config.json` in the working
+directory.
+
+`route-history` is the only writer among the three, it only ever appends, and it takes a lock while
+it does: an append is read-then-write, and two agents appending at once would otherwise interleave.

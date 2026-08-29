@@ -1,0 +1,9 @@
+name: depth-scales
+description: A trivial change stays trivial. Rigour that cannot be cheap gets abandoned.
+runs: 3
+max_turns: 12
+timeout_seconds: 600
+tags: [depth, budget]
+graders:
+  - file: graders/no-ceremony.md
+  - file: graders/still-verified.md

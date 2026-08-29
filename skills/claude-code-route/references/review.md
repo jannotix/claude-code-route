@@ -10,12 +10,29 @@ ships broken code with a confident summary.
 ## Freeze first
 
 ```bash
-mkdir -p .route && git diff > .route/candidate.patch
+mkdir -p .route && git add -A && git diff --cached > .route/candidate.patch
+wc -l .route/candidate.patch
 ```
+
+**Stage before diffing.** `git diff` omits untracked files, which is every file of a new capability.
+The patch comes out empty, the reviewer finds nothing in it, and the PASS it returns is about
+nothing. Read the line count before sending: an empty patch is a broken freeze, not a small change.
 
 Without a freeze the reviewer judges bytes that move underneath it, and a finding cites a line
 number that no longer means anything. Check `.route/` is ignored by git; if it is not, say so and
 leave `.gitignore` alone.
+
+## Latency
+
+An external model at high reasoning effort takes minutes on a real candidate, not seconds — seven
+to ten on a few hundred lines is ordinary. Run it in the background and poll for completion rather
+than blocking a foreground call that will time out and lose the work.
+
+If the reviewer times out or dies, the review did not happen. Say so and fall back to the degraded
+path; do not report the absence of findings as a PASS.
+
+Disable the reviewer tool's own extensions where the flag exists. A reviewer that loads its own
+review skill is answering a prompt you did not write, and paying for it.
 
 ## Choosing a reviewer
 

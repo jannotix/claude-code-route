@@ -9,7 +9,7 @@
 //
 // Entries are never edited. A correction is a new entry. Exit 1 on a broken chain.
 
-import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, appendFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -95,6 +95,49 @@ const prune = (o) => {
   return out;
 };
 
+
+// --- lock ---------------------------------------------------------------------
+
+// An append is read-then-write: the previous hash has to be the one on disk. mkdir is
+// atomic on every platform this runs on, so the lock directory is the whole mechanism.
+const LOCK_TIMEOUT_MS = 10000;
+const LOCK_STALE_MS = 30000;
+
+function withLock(target, fn) {
+  const lock = `${target}.lock`;
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      break;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+      // A lock older than the stale window belongs to a process that died holding it.
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) {
+          rmSync(lock, { recursive: true, force: true });
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      if (Date.now() > deadline) {
+        process.stderr.write(
+          `route-history: ${lock} is held; another append is in progress. Retry, or remove it if no process holds it.\n`);
+        process.exit(3);
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+
+  try {
+    return fn();
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
+}
+
 // --- append ------------------------------------------------------------------
 
 function append() {
@@ -107,6 +150,11 @@ function append() {
     process.stderr.write(`warn: "${event}" is not a known event name; recording it anyway\n`);
   }
 
+  mkdirSync(dirname(file), { recursive: true });
+  withLock(file, () => appendUnderLock(event, model));
+}
+
+function appendUnderLock(event, model) {
   const lines = read();
   const previous = lines.length ? lines[lines.length - 1].entry : null;
 
@@ -143,7 +191,6 @@ function append() {
 
   entry.hash = digest(entry);
 
-  mkdirSync(dirname(file), { recursive: true });
   appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8');
   process.stdout.write(`${file}: #${entry.seq} ${entry.event} ${entry.ts}\n`);
 }

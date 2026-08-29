@@ -79,9 +79,34 @@ First release.
 - `route-lint.mjs` — plan structure, identifier uniqueness, acceptance criteria, requirements with
   no home, proofs that assert nothing executable, findings acted on without verification, unnamed
   gaps, unmeasured requirements and six comment patterns. Exit 1 on error, `--json` for CI.
+  `--stage plan|execute|review` selects the gate under check, because a plan is complete before a
+  proof exists. `--layers`, or `route.config.json`, replaces the four default layer names.
 - `route-map.mjs` — repository skeleton from structure, sizes, git churn and manifests. No file
   content reaches the model, so cost is flat in repository size.
-- `route-history.mjs` — append, render, verify, tail. The only writer of the three, and it only
-  appends.
+- `route-history.mjs` — append, render, verify, tail. The only writer of the three, it only appends,
+  and it holds a lock while it does: an append is read-then-write, and simultaneous appends would
+  otherwise produce duplicate sequence numbers and a chain that no longer verifies.
 
-[1.0.0]: https://github.com/jannotix/claude-code-route/releases/tag/v1.0.0
+**Evals**
+
+- `evals/` — four cases scoring the skill rather than its scripts, against a no-plugin baseline arm:
+  `plan-gate`, `proof-gate`, `depth-scales`, `comment-voice`. `depth-scales` fails on
+  over-application, which is the failure mode a discipline dies of. Unverified: `claude plugin eval`
+  is in early access and was unavailable on the authoring account, so no case has been executed.
+
+### Found by running the cycle on itself
+
+Before release, one Standard cycle was run end to end on a real change with Codex as the external
+reviewer. It ended **blocked**, which is the outcome the budget is supposed to produce, and it
+surfaced three defects in the skill itself, all fixed here:
+
+- The documented freeze command was `git diff`, which omits untracked files. On a new capability it
+  produced an empty patch, and a reviewer handed an empty patch returns a PASS about nothing. It is
+  now `git add -A && git diff --cached`, with an instruction to check the line count.
+- `route-lint` had no notion of cycle stage, so it demanded a proof section at the Plan gate and
+  exited 1 on a plan that was complete. Hence `--stage`.
+- The review section said nothing about reviewer latency. At high reasoning effort a review of a few
+  hundred lines takes minutes, and a foreground call times out and loses the work. The reference now
+  says to run it in the background, and that a timed-out reviewer means the review did not happen.
+
+[1.0.0]: https://github.com/jannotix/claude-code-route/releases/tag/claude-code-route--v1.0.0

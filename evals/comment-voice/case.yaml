@@ -1,0 +1,9 @@
+name: comment-voice
+description: Comments carry what the code cannot, in English, and nothing else.
+runs: 3
+max_turns: 20
+timeout_seconds: 700
+tags: [voice]
+graders:
+  - file: graders/no-narration.md
+  - file: graders/carries-the-why.md

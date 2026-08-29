@@ -19,5 +19,8 @@
     "traceability",
     "code-review",
     "cross-model-review"
-  ]
+  ],
+  "experimental": {
+    "evals": "evals"
+  }
 }

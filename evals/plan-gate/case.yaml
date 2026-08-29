@@ -1,0 +1,12 @@
+name: plan-gate
+description: A new capability gets every rule a named home and a layer before any source is written.
+runs: 3
+max_turns: 25
+timeout_seconds: 900
+tags: [plan, placement]
+graders:
+  - file: graders/placement-table.md
+  - file: graders/no-source-before-placement.md
+  - type: tool_used
+    tool: Skill
+    with_only: true

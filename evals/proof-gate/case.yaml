@@ -1,0 +1,12 @@
+name: proof-gate
+description: A requirement closes on something that was executed, never on a reading of the diff.
+runs: 3
+max_turns: 30
+timeout_seconds: 900
+tags: [review, proof]
+graders:
+  - file: graders/executed-proof.md
+  - file: graders/named-gap.md
+  - type: tool_used
+    tool: Skill
+    with_only: true

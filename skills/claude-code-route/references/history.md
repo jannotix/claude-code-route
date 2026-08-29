@@ -73,6 +73,19 @@ costs tokens on every write. One entry per gate, per verdict, per decision.
 
 Empty fields are dropped rather than written as null, so an entry stays small.
 
+## Appending at the gate, not at the end
+
+Append when the gate closes, not in a batch at the end of the cycle. A batch is easy to spot in the
+rendered log — every entry within the same second — and it defeats the one property the timestamps
+were for. Nothing enforces this: the script records the moment it is called, so calling it late
+records a late moment honestly, and the log then says the appends were batched rather than hiding it.
+
+The script takes a lock for the duration of an append, because an append is read-then-write: it
+reads the last entry's hash and writes a new line linked to it. Two agents appending at the same
+instant without a lock produce duplicate sequence numbers and a chain that no longer verifies. The
+lock is a directory beside the log, held for milliseconds, and reclaimed automatically after thirty
+seconds if the process holding it died.
+
 ## The chain
 
 Each entry carries `sha256` over its own content, and `prev` holds the hash of the entry before it.

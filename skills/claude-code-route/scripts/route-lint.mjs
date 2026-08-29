@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 // Deterministic checks for a route plan and for comment voice. No model calls, no dependencies.
 //
-//   node route-lint.mjs <planDir|PLAN.md> [sourcePath ...] [--json] [--no-comments]
+//   node route-lint.mjs <planDir|PLAN.md> [sourcePath ...]
+//     [--stage plan|execute|review] [--layers a,b,c] [--json] [--no-comments]
 //
 // Enforces the two properties the cycle exists for: every requirement has a home, and every
 // requirement closes on something that was executed. Exit 1 on error, 0 on warnings only.
+//
+// The stage says which gate is being checked, because a plan is complete before a proof exists.
+// Default is review, which checks everything.
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, extname, relative, basename, sep } from 'node:path';
@@ -12,7 +16,8 @@ import { join, extname, relative, basename, sep } from 'node:path';
 const ID_DEF = /^\s{0,3}(REQ|NFR|INV|ASSUMPTION)-(\d{1,4})\b/;
 const ID_ANY = /\b(REQ|NFR|INV|ASSUMPTION)-(\d{1,4})\b/;
 const AC_ANY = /\bAC-(\d{1,4})\.(\d{1,3})\b/g;
-const LAYERS = ['domain', 'application', 'infrastructure', 'interface'];
+const DEFAULT_LAYERS = ['domain', 'application', 'infrastructure', 'interface'];
+const STAGES = ['plan', 'execute', 'review'];
 
 // A proof cell that reads like judgement rather than execution. Nothing closes on a read.
 const PROSE_PROOF = /\b(by inspection|inspected|reviewed|code review|looks? (correct|right|fine)|should work|seems? (correct|fine)|obvious|trivial|self[- ]evident|verified visually|no test needed|n\/a)\b/i;
@@ -77,7 +82,7 @@ const isPlaceholder = (s) => s === '' || /^<.*>$/.test(s) || s === '—' || s ==
 
 // --- plan --------------------------------------------------------------------
 
-function checkPlan(planPath) {
+function checkPlan(planPath, stage, layers) {
   const text = readFileSync(planPath, 'utf8');
 
   if (!/^\s*Depth:\s*(Light|Standard|Guarded)\s*$/im.test(text)) {
@@ -140,13 +145,17 @@ function checkPlan(planPath) {
       'Out of scope is missing or empty; nothing refuses scope creep later');
   }
 
-  checkPlacement(planPath, text, defs);
-  checkFindings(planPath, text);
-  checkProof(planPath, text, reqs);
+  checkPlacement(planPath, text, defs, layers);
+
+  // A plan is complete before a proof exists. Only the review gate demands both.
+  if (stage === 'review') {
+    checkFindings(planPath, text);
+    checkProof(planPath, text, reqs);
+  }
 }
 
 // Every requirement has a home. This is the Plan gate.
-function checkPlacement(planPath, text, defs) {
+function checkPlacement(planPath, text, defs, layers) {
   const sec = section(text, 'Placement');
   const placed = new Map();
 
@@ -169,9 +178,9 @@ function checkPlacement(planPath, text, defs) {
         `${id} has no home symbol; it will land in whichever file was open`);
     }
     const layer = (layerCell ?? '').toLowerCase();
-    if (!LAYERS.some((l) => layer.includes(l))) {
+    if (!layers.some((l) => layer.includes(l.toLowerCase()))) {
       report('error', planPath, row.line, 'placement-no-layer',
-        `${id} names no layer (${LAYERS.join(', ')})`);
+        `${id} names no layer (${layers.join(', ')})`);
     }
     if (!defs.has(id)) {
       report('warn', planPath, row.line, 'placement-orphan',
@@ -357,12 +366,48 @@ function walk(target, out) {
 const argv = process.argv.slice(2);
 const asJson = argv.includes('--json');
 const skipComments = argv.includes('--no-comments');
-const positional = argv.filter((a) => !a.startsWith('--'));
+
+function flag(name) {
+  const i = argv.indexOf(`--${name}`);
+  if (i === -1 || i + 1 >= argv.length) return null;
+  const v = argv[i + 1];
+  return v.startsWith('--') ? null : v;
+}
+
+// A value consumed by a flag is not a positional argument.
+const consumed = new Set();
+for (const name of ['stage', 'layers']) {
+  const i = argv.indexOf(`--${name}`);
+  if (i !== -1 && i + 1 < argv.length && !argv[i + 1].startsWith('--')) consumed.add(i + 1);
+}
+const positional = argv.filter((a, i) => !a.startsWith('--') && !consumed.has(i));
 
 if (positional.length === 0) {
-  process.stderr.write('usage: route-lint.mjs <planDir|PLAN.md> [sourcePath ...] [--json] [--no-comments]\n');
+  process.stderr.write(
+    'usage: route-lint.mjs <planDir|PLAN.md> [sourcePath ...] ' +
+    '[--stage plan|execute|review] [--layers a,b,c] [--json] [--no-comments]\n');
   process.exit(2);
 }
+
+const stage = flag('stage') ?? 'review';
+if (!STAGES.includes(stage)) {
+  process.stderr.write(`route-lint: unknown stage "${stage}". Use ${STAGES.join(', ')}.\n`);
+  process.exit(2);
+}
+
+// Layers: the flag, else route.config.json in the working directory, else the four defaults.
+function configuredLayers() {
+  const fromFlag = flag('layers');
+  if (fromFlag) return fromFlag.split(',').map((l) => l.trim()).filter(Boolean);
+  try {
+    const cfg = JSON.parse(readFileSync('route.config.json', 'utf8'));
+    if (Array.isArray(cfg.layers) && cfg.layers.length) return cfg.layers.map(String);
+  } catch {
+    // No config, or an unreadable one: the defaults stand.
+  }
+  return DEFAULT_LAYERS;
+}
+const layers = configuredLayers();
 
 const [target, ...sources] = positional;
 const planPath = basename(target).toLowerCase() === 'plan.md' ? target : join(target, 'PLAN.md');
@@ -370,7 +415,7 @@ const planPath = basename(target).toLowerCase() === 'plan.md' ? target : join(ta
 if (!existsSync(planPath)) {
   report('error', planPath, 0, 'plan-missing', 'PLAN.md not found');
 } else {
-  checkPlan(planPath);
+  checkPlan(planPath, stage, layers);
 }
 if (!skipComments) {
   for (const s of sources) for (const f of walk(s, [])) checkComments(f);
@@ -380,7 +425,7 @@ const errors = findings.filter((f) => f.level === 'error');
 const warnings = findings.filter((f) => f.level === 'warn');
 
 if (asJson) {
-  process.stdout.write(JSON.stringify({ errors, warnings }, null, 2) + '\n');
+  process.stdout.write(JSON.stringify({ stage, layers, errors, warnings }, null, 2) + '\n');
 } else {
   const here = process.cwd();
   const show = (f) => {
@@ -390,7 +435,7 @@ if (asJson) {
   };
   errors.forEach(show);
   warnings.forEach(show);
-  process.stdout.write(`\n${errors.length} error(s), ${warnings.length} warning(s)\n`);
+  process.stdout.write(`\n${errors.length} error(s), ${warnings.length} warning(s)  [stage: ${stage}]\n`);
 }
 
 process.exit(errors.length > 0 ? 1 : 0);
