@@ -85,8 +85,7 @@ jobs:
                 }
               }
             }
-            if (bad.length) { console.error(bad.join("
-")); process.exit(1); }
+            if (bad.length) { for (const b of bad) console.error(b); process.exit(1); }
             console.log("eval suite: " + cases.length + " cases, all references resolve");
           '
 
