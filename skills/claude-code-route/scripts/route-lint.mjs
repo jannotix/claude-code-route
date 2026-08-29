@@ -64,6 +64,17 @@ function hasContent(sec) {
   });
 }
 
+// The header cells of the first markdown table in a section.
+function tableHeader(sec) {
+  if (sec === null) return [];
+  for (const raw of sec.body.split('\n')) {
+    const t = raw.trim();
+    if (!t.startsWith('|') || /^\|[\s:|-]*\|?$/.test(t)) continue;
+    return t.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim().toLowerCase());
+  }
+  return [];
+}
+
 // Rows of the first markdown table in a section, header and separator dropped.
 function tableRows(sec) {
   if (sec === null) return [];
@@ -79,6 +90,19 @@ function tableRows(sec) {
 }
 
 const isPlaceholder = (s) => s === '' || /^<.*>$/.test(s) || s === '—' || s === '-' || s === '...';
+
+// A backticked span alone is not evidence: `checked` is a word, `pytest tests/x.py::t` is a thing
+// that ran. What separates them is a character a bare English word cannot contain — a path
+// separator, a test-id colon pair, a flag, a call, a file extension — or a second token, since a
+// command with arguments is a command.
+const EXECUTABLE = /[/\\]|::|--|\(\)|\s|\.[a-z]{1,4}\b/;
+
+function looksExecutable(proof) {
+  for (const m of proof.matchAll(/`([^`]{3,})`/g)) {
+    if (EXECUTABLE.test(m[1])) return true;
+  }
+  return false;
+}
 
 // --- plan --------------------------------------------------------------------
 
@@ -189,7 +213,7 @@ function checkPlacement(planPath, text, defs, layers) {
   }
 
   for (const d of defs.values()) {
-    if (d.kind !== 'REQ') continue;
+    if (d.kind !== 'REQ' && d.kind !== 'NFR') continue;
     if (!placed.has(d.id)) {
       report('error', planPath, d.line, 'req-unplaced',
         `${d.id} has no row in Placement; a rule with no named home is not planned`);
@@ -201,12 +225,34 @@ function checkPlacement(planPath, text, defs, layers) {
 function checkFindings(planPath, text) {
   const sec = section(text, 'Findings');
   if (sec === null) return;
+
+  // Locate the columns by header. A table with a column missing or moved must still be
+  // checked: skipping it whole is how a finding closes with no verification at all.
+  const header = tableHeader(sec);
+  const at = (name, fallback) => {
+    const i = header.findIndex((h) => h.includes(name));
+    return i === -1 ? fallback : i;
+  };
+  const iClass = at('class', 1);
+  const iSummary = at('summary', 3);
+  const iVerified = at('verified', -1);
+  const iOutcome = at('outcome', -1);
+
   for (const row of tableRows(sec)) {
     const cells = row.cells;
-    if (cells.length < 6) continue;
-    const [, cls, , summary, verified, outcome] = cells;
-    if (isPlaceholder(summary)) continue;
+    const cls = cells[iClass];
+    const summary = cells[iSummary];
+    const verified = iVerified === -1 ? '' : cells[iVerified];
+    const outcome = iOutcome === -1 ? '' : cells[iOutcome];
+
+    if (summary === undefined || isPlaceholder(summary)) continue;
     if (/^noise$/i.test(cls ?? '')) continue;
+
+    if (iOutcome === -1) {
+      report('error', planPath, row.line, 'finding-unverified',
+        'The Findings table has no Outcome column, so no finding in it can be shown as resolved');
+      continue;
+    }
     if (/^(fixed|confirmed)$/i.test(outcome ?? '') && isPlaceholder(verified)) {
       report('error', planPath, row.line, 'finding-unverified',
         'A finding was acted on with no verification step recorded; a finding is a claim, not a truth');
@@ -252,7 +298,7 @@ function checkProof(planPath, text, reqs) {
         `${id} closes on judgement, not execution: "${proof.slice(0, 60)}"`);
       continue;
     }
-    if (!/`[^`]{3,}`/.test(proof)) {
+    if (!looksExecutable(proof)) {
       report('error', planPath, row.line, 'proof-not-executed',
         `${id} names no command or test that ran; nothing closes on a read`);
     }

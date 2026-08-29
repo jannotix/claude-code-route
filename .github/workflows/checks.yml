@@ -56,6 +56,40 @@ jobs:
             if (bad.length) { console.error(bad.join("\n")); process.exit(1); }
           '
 
+
+      - name: Eval suite is well formed
+        run: |
+          node -e '
+            const fs = require("fs"), path = require("path");
+            const dir = "evals";
+            const manifest = JSON.parse(fs.readFileSync(".claude-plugin/plugin.json", "utf8"));
+            let bad = [];
+            if (manifest.experimental?.evals !== dir) bad.push("manifest does not declare " + dir);
+            const cases = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory());
+            if (cases.length < 4) bad.push("fewer than four cases");
+            for (const c of cases) {
+              const d = path.join(dir, c.name);
+              const y = path.join(d, "case.yaml");
+              if (!fs.existsSync(y)) { bad.push(d + ": no case.yaml"); continue; }
+              if (!fs.existsSync(path.join(d, "prompt.md"))) bad.push(d + ": no prompt.md");
+              const yaml = fs.readFileSync(y, "utf8");
+              const name = (yaml.match(/^name:\s*(\S+)\s*$/m) || [])[1];
+              if (name !== c.name) bad.push(d + ": name is " + name);
+              const refs = [...yaml.matchAll(/^\s*-\s*file:\s*(\S+)\s*$/gm)].map(m => m[1]);
+              if (refs.length < 2) bad.push(d + ": fewer than two graders");
+              for (const r of refs) if (!fs.existsSync(path.join(d, r))) bad.push(d + " -> " + r);
+              const gdir = path.join(d, "graders");
+              if (fs.existsSync(gdir)) {
+                for (const g of fs.readdirSync(gdir)) {
+                  if (!refs.includes("graders/" + g)) bad.push(d + ": unreferenced " + g);
+                }
+              }
+            }
+            if (bad.length) { console.error(bad.join("
+")); process.exit(1); }
+            console.log("eval suite: " + cases.length + " cases, all references resolve");
+          '
+
       - name: route-map runs on this repository
         run: node skills/claude-code-route/scripts/route-map.mjs . --json > /dev/null
 

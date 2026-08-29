@@ -109,4 +109,19 @@ surfaced three defects in the skill itself, all fixed here:
   hundred lines takes minutes, and a foreground call times out and loses the work. The reference now
   says to run it in the background, and that a timed-out reviewer means the review did not happen.
 
+### Found by running the defect route on route-lint itself
+
+A second cycle, this one on a defect rather than a capability, probed the two gates and found that
+`route-lint` reported **zero errors** on a plan that violated both. Three false negatives, each now
+closed with a test that fails on the pre-fix revision:
+
+- An NFR with no row in Placement was never reported: the unplaced check skipped every non-REQ.
+- Any backticked span of three characters closed a requirement, so `` `checked` `` counted as an
+  execution. A proof cell must now name something with a path separator, a test-id, a flag, a call,
+  a file extension, or a second token.
+- A Findings table with fewer than six columns was skipped whole, so no finding in it was checked.
+  Columns are now located by header name, and a table with no Outcome column is itself an error.
+
+The first of these immediately caught a case in this repository's own test fixtures.
+
 [1.0.0]: https://github.com/jannotix/claude-code-route/releases/tag/claude-code-route--v1.0.0
