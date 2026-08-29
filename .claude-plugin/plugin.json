@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "claude-code-route",
+  "displayName": "Claude Code Route",
+  "version": "1.0.0",
+  "description": "Three roles in a cycle - plan, execute, review - where every requirement names the symbol that owns it and closes only on something that was executed.",
+  "author": {
+    "name": "Gianluca Iannotta",
+    "url": "https://github.com/jannotix"
+  },
+  "homepage": "https://github.com/jannotix/claude-code-route",
+  "repository": "https://github.com/jannotix/claude-code-route",
+  "license": "MIT",
+  "keywords": [
+    "spec-driven",
+    "sdd",
+    "domain-driven-design",
+    "architecture",
+    "traceability",
+    "code-review",
+    "cross-model-review"
+  ]
+}

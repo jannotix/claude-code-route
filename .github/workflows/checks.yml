@@ -1,0 +1,113 @@
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Parse
+        run: |
+          for f in skills/claude-code-route/scripts/*.mjs; do node --check "$f"; done
+          node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/marketplace.json'))"
+
+      - name: Manifest version matches the changelog
+        run: |
+          v=$(node -p "require('./.claude-plugin/plugin.json').version")
+          grep -q "^## \[$v\]" CHANGELOG.md || { echo "CHANGELOG.md has no entry for $v"; exit 1; }
+
+      - name: Skill frontmatter
+        run: |
+          node -e '
+            const t = require("fs").readFileSync("skills/claude-code-route/SKILL.md", "utf8");
+            const m = t.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+            if (!m) { console.error("SKILL.md has no frontmatter"); process.exit(1); }
+            for (const k of ["name", "description", "license"]) {
+              if (!new RegExp("^" + k + ":", "m").test(m[1])) { console.error("missing " + k); process.exit(1); }
+            }
+          '
+
+      - name: Internal links resolve
+        run: |
+          node -e '
+            const fs = require("fs"), path = require("path");
+            const base = "skills/claude-code-route";
+            let bad = [];
+            const scan = (file, dir) => {
+              for (const m of fs.readFileSync(file, "utf8").matchAll(/\]\(([^)#:]+\.md)\)/g)) {
+                const p = path.join(dir, m[1]);
+                if (!fs.existsSync(p)) bad.push(file + " -> " + m[1]);
+              }
+            };
+            scan(base + "/SKILL.md", base);
+            for (const f of fs.readdirSync(base + "/references")) scan(base + "/references/" + f, base + "/references");
+            if (bad.length) { console.error(bad.join("\n")); process.exit(1); }
+          '
+
+      - name: route-map runs on this repository
+        run: node skills/claude-code-route/scripts/route-map.mjs . --json > /dev/null
+
+      - name: route-history appends, chains and detects an edit
+        run: |
+          set -e
+          H=skills/claude-code-route/scripts/route-history.mjs
+          L=$(mktemp)
+          node $H append --file "$L" --event cycle.planned --model ci --operator ci --ts 2026-01-01T00:00:00+00:00
+          node $H append --file "$L" --event cycle.reviewed --model ci --operator ci --ts 2026-01-01T00:01:00+00:00 --verdict delivered
+          node $H verify --file "$L"
+          sed -i 's/delivered/blocked/' "$L"
+          if node $H verify --file "$L"; then echo "verify failed to detect an edited entry"; exit 1; fi
+
+      - name: route-lint rejects a plan that closes on a read
+        run: |
+          set -e
+          D=$(mktemp -d)
+          cat > "$D/PLAN.md" <<'PLAN'
+          # Sample
+
+          Depth: Standard
+
+          ## Request
+
+          A sample request.
+
+          ## Requirements
+
+          REQ-001  A thing must happen.
+            AC-001.1  Given a When b Then c
+
+          ## Placement
+
+          | REQ | Rule | Home | Layer |
+          | --- | --- | --- | --- |
+          | REQ-001 | the rule | `Thing.doIt` | domain |
+
+          ## Scope
+
+          src/
+
+          ## Out of scope
+
+          - Everything else.
+
+          ## Proof
+
+          | Requirement | Proof | Result |
+          | --- | --- | --- |
+          | REQ-001 | verified by inspection | pass |
+          PLAN
+          if node skills/claude-code-route/scripts/route-lint.mjs "$D"; then
+            echo "lint accepted a proof that was never executed"; exit 1
+          fi

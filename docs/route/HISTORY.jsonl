@@ -1,0 +1,1 @@
+{"seq":1,"ts":"2026-08-29T13:10:43+02:00","event":"project.initialised","actor":{"model":"claude-opus-5","harness":"claude-code","operator":"Gianluca Iannotta <giannotta@tublat.com>"},"note":"Skill, references, templates and the three scripts","revision":"b468a24","hash":"sha256:87d801f561e4d97b9bf31178b5342aa3a1cde611d1744f34a981bbf23f5bba81"}

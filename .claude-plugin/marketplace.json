@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "claude-code-route",
+  "owner": {
+    "name": "Gianluca Iannotta",
+    "url": "https://github.com/jannotix"
+  },
+  "metadata": {
+    "description": "Plan, execute, review. Enterprise SDD and DDD discipline for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "claude-code-route",
+      "source": "./",
+      "category": "development",
+      "description": "A rule with no named home is not planned, and nothing closes on a read. Cross-model review routes each finding back to the role that owns it."
+    }
+  ]
+}
