@@ -152,8 +152,18 @@ findings list, where self-review means pulling the whole diff back into context 
 weakest form of review there is. That cost lands on the other account, which is said rather than
 hidden.
 
-No figure is published for any of this, because none has been measured, and an unmeasured number in
-a README is a false claim. The mechanism is stated so it can be checked on your own repository.
+No figure is published for the savings, because none has been measured, and an unmeasured number in a
+README is a false claim. The mechanism is stated so it can be checked on your own repository.
+
+What *is* measurable is the skill's own footprint, and the harness reports it:
+
+```bash
+claude plugin details claude-code-route
+```
+
+At 1.0.0 that is roughly **210 tokens always-on** and **4.3k when the skill fires**. References load
+only when a role's gate is genuinely in doubt, at most one per cycle. Run the command yourself
+rather than trusting this paragraph — it is the same measurement, on your machine.
 
 The honest failure mode: a cycle on a Light change with a cold map and a long plan costs more than
 an ordinary session. The depth classification and the *plan shorter than the diff* rule exist to
