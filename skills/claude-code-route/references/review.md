@@ -214,27 +214,41 @@ report named one input, the root cause covers a family.
 
 ## What the linter accepts as a proof
 
-`route-lint` cannot run your proof, so it checks the only thing a string can carry: whether it names
-something that *could* have run. A proof cell closes a requirement when a backticked span either
+`route-lint` cannot run your proof, and no string can prove that something ran. So it does not try
+to infer execution. It checks one decidable thing: whether the cell names a command a reader could
+run. A backticked span closes a requirement when
 
-- carries a structural signal a bare phrase cannot — a path separator, a `::` test id, a `--` flag,
-  a `()` call, or a file extension; or
-- begins with the name of something that runs, and takes an argument: `npm test`, `make check`,
-  `dotnet test`, `docker compose up -d`; or
-- begins with `$ `, which declares the rest an executed command. Use it for tooling the list has
-  never heard of: `$ mytool check`. A heuristic cannot know your tools; you can tell it.
+- its first word is a program the tool knows — `pytest`, `npm test`, `make check`, `dotnet test`,
+  `docker compose up -d` — with or without arguments; or
+- it begins with `$ `, which declares the rest a command you ran: `$ ./bin/verify --all`. Use it for
+  anything the list has never heard of. The marker must be followed by a program: `$ # a comment`
+  marks nothing.
 
-It rejects judgement outright — *by inspection*, *reviewed*, *looks correct*, *should work*, *n/a* —
-and it rejects a bare phrase, including a two-word one: `a b`, `all green`, `manual check`.
+Everything else is refused, including things that look technical. `README.md` is a filename.
+`pass/fail` is two words with a slash. `e.g. checked` is prose. None of them is a command.
 
-It is an error rather than a warning because this is the gate the product exists for, and the
-alternative accepted every English word. Both of its earlier edges were closed after a reviewer
-declined to accept them as documented trade-offs: a one-letter extension no longer counts, so
-`e.g. checked` is refused, and the `$` prefix covers a runner the list does not know.
+Judgement is refused separately and outright: *by inspection*, *reviewed*, *looks correct*,
+*should work*, *n/a*.
 
-**It is not a substitute for the reviewer.** A test named for a requirement it never exercises
-passes the linter and fails the second attack axis. The linter checks that a proof was named; only
-an execution and a reviewer check that it is the right one.
+**Why the rule is this blunt.** Four review rounds attacked an earlier version that tried to infer
+execution from a span's characters — a path separator, a colon pair, a file extension. Each round
+found a new phrase that satisfied the shape without being a command, and each repair widened the
+surface for the next. The inference is gone because the question it was answering is not decidable
+from a string. Naming a program is.
+
+**It is not a substitute for the reviewer.** A test named for a requirement it never exercises names
+a real command and passes the linter. The linter checks that a proof was named; only an execution
+and a reviewer check that it is the right one.
+
+## Before you send the candidate
+
+Empty `.route/` of the previous round's transcripts. A reviewer given a directory of them will read
+them: on this project one round spent its entire budget grepping 300 KB of earlier reviews before it
+reached the diff, and returned nothing.
+
+```bash
+rm -f .route/*.txt && git add -A && git diff --cached > .route/candidate.patch
+```
 
 ## Named gaps
 

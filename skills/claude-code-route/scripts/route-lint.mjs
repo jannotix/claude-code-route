@@ -91,18 +91,14 @@ function tableRows(sec) {
 
 const isPlaceholder = (s) => s === '' || /^<.*>$/.test(s) || s === '—' || s === '-' || s === '...';
 
-// A backticked span alone is not evidence: `checked` is a word, `pytest tests/x.py::t` is a thing
-// that ran. Two signals separate them. Either the span carries a character a bare phrase cannot —
-// a path separator, a test-id colon pair, a flag, a call, a file extension — or it starts with the
-// name of something that runs and takes an argument. Whitespace alone is not enough: `a b` is two
-// words, not a command.
-// The extension needs two letters or more: a one-letter one matches the dots in "e.g." and
-// "i.e.", which is prose.
-const STRUCTURAL = /[/\\]|::|--|\(\)|\.[a-z]{2,4}\b/;
-
-// The escape hatch for a runner this list has never heard of: `$ mytool check` says, explicitly,
-// that what follows was run. A heuristic cannot decide that, and an author can.
-const EXPLICIT_COMMAND = /^\$\s+\S/;
+// No string can prove that something ran. What a string can carry is a command a reader could
+// run, and that is the only thing checked here.
+//
+// Four rounds of inferring execution from shape produced four rounds of false negatives —
+// `checked`, then `a b`, then `e.g. checked`, then `README.md` and `pass/fail`. Every repair
+// widened the surface for the next one, which is the shape of a requirement that was wrong
+// rather than code that was buggy. So the inference is gone. A proof names a program this list
+// knows, or the author marks it `$` and takes responsibility. (REQ-002, REQ-004, REQ-005)
 
 const RUNNER = new RegExp('^(' + [
   'pytest', 'python[0-9.]*', 'py', 'tox', 'nox', 'hatch', 'uv', 'poetry', 'pip[0-9]*',
@@ -118,12 +114,25 @@ const RUNNER = new RegExp('^(' + [
   'eslint', 'ruff', 'mypy', 'black', 'prettier', 'shellcheck', 'golangci-lint',
 ].join('|') + ')\\b', 'i');
 
+const COMMENT_TOKEN = /^[#;/]/;
+
+// The command a span names, or null if it names none.
+function commandOf(span) {
+  const explicit = /^\$\s/.test(span);
+  const body = (explicit ? span.slice(1) : span).trim();
+  if (!body) return null;
+  const [program, ...args] = body.split(/\s+/);
+  // `$ # comment only` marks nothing: the marker must be followed by a program.
+  if (!program || COMMENT_TOKEN.test(program)) return null;
+  return { explicit, program, args };
+}
+
 function looksExecutable(proof) {
   for (const m of proof.matchAll(/`([^`]{3,})`/g)) {
-    const span = m[1].trim();
-    if (EXPLICIT_COMMAND.test(span)) return true;
-    if (STRUCTURAL.test(span)) return true;
-    if (/\s/.test(span) && RUNNER.test(span)) return true;
+    const cmd = commandOf(m[1].trim());
+    if (cmd === null) continue;
+    if (cmd.explicit) return true;
+    if (RUNNER.test(cmd.program)) return true;
   }
   return false;
 }
@@ -176,9 +185,17 @@ function checkPlan(planPath, stage, layers) {
         `${d.id} carries no number; a requirement without a measurement cannot fail`);
     }
     // An invariant is not placed in the Placement table; it names its owner where it is stated.
-    if (d.kind === 'INV' && !/\bOwner:\s*\S/.test(d.text)) {
-      report('error', planPath, d.line, 'invariant-unowned',
-        `${d.id} names no owner; an invariant with none is enforced by convention, which is to say sometimes`);
+    // An unfilled template placeholder is not an owner, and neither is a list of them.
+    if (d.kind === 'INV') {
+      const owner = (d.text.match(/\bOwner:\s*(.*)$/) ?? [])[1]?.trim() ?? '';
+      const named = owner.replace(/`/g, '').trim();
+      if (!named || /^<.*>$/.test(named) || named === '?') {
+        report('error', planPath, d.line, 'invariant-unowned',
+          `${d.id} names no owner; an invariant with none is enforced by convention, which is to say sometimes`);
+      } else if (/,| and /.test(named)) {
+        report('error', planPath, d.line, 'invariant-two-owners',
+          `${d.id} names more than one owner; two enforcements of one rule drift apart`);
+      }
     }
   }
   for (const ac of acs) {
@@ -258,37 +275,50 @@ function checkFindings(planPath, text) {
   // Locate the columns by header. A table with a column missing or moved must still be
   // checked: skipping it whole is how a finding closes with no verification at all.
   const header = tableHeader(sec);
-  // Exact before substring: a "Unverified reason" column must not answer to "verified".
-  const at = (name, fallback) => {
-    const exact = header.indexOf(name);
-    if (exact !== -1) return exact;
-    const loose = header.findIndex((h) => h.split(/\s+/).includes(name));
-    return loose === -1 ? fallback : loose;
+  // Exact only. A loose match let "Not verified" and "Unverified reason" answer for "verified",
+  // which is the column whose emptiness the whole check is about.
+  const at = (names) => {
+    for (const n of names) {
+      const i = header.indexOf(n);
+      if (i !== -1) return i;
+    }
+    return -1;
   };
-  const iClass = at('class', 1);
-  const iSummary = at('summary', 3);
-  const iVerified = at('verified', -1);
-  const iOutcome = at('outcome', -1);
+  const iClass = at(['class']);
+  const iVerified = at(['verified', 'verification']);
+  const iOutcome = at(['outcome', 'result']);
+
+  // A row carries a finding when any cell past the first says something. Keying this off a
+  // Summary column index made a three-column table look empty and suppressed every check.
+  const rows = tableRows(sec).filter(
+    (r) => r.cells.slice(1).some((c) => !isPlaceholder(c)));
+  if (rows.length === 0) return;
 
   // A table that cannot express resolution is malformed once, not once per row: an open
   // finding is not a finding acted on without verification.
-  if (iOutcome === -1 && tableRows(sec).some((r) => !isPlaceholder(r.cells[iSummary] ?? ''))) {
+  if (iOutcome === -1) {
     report('error', planPath, sec.offset, 'findings-no-outcome',
       'The Findings table has no Outcome column, so no finding in it can be shown as resolved');
+    return;
+  }
+  if (iVerified === -1) {
+    report('error', planPath, sec.offset, 'findings-no-verified',
+      'The Findings table has no Verified column, so no finding in it can show what confirmed it');
+    return;
   }
 
   for (const row of tableRows(sec)) {
     const cells = row.cells;
     const cls = cells[iClass];
-    const summary = cells[iSummary];
-    const verified = iVerified === -1 ? '' : cells[iVerified];
-    const outcome = iOutcome === -1 ? '' : cells[iOutcome];
+    const verified = cells[iVerified];
+    const outcome = cells[iOutcome];
 
-    if (summary === undefined || isPlaceholder(summary)) continue;
+    if (cells.slice(1).every((c) => isPlaceholder(c))) continue;
     if (/^noise$/i.test(cls ?? '')) continue;
-    if (iOutcome === -1) continue;
 
-    if (/^(fixed|confirmed)$/i.test(outcome ?? '') && isPlaceholder(verified)) {
+    // "fixed under REQ-004" is a finding acted on. Matching the whole cell exactly meant a
+    // qualified outcome went unchecked, including every one in this project's own plans.
+    if (/^\s*(fixed|confirmed|resolved|done)\b/i.test(outcome ?? '') && isPlaceholder(verified)) {
       report('error', planPath, row.line, 'finding-unverified',
         'A finding was acted on with no verification step recorded; a finding is a claim, not a truth');
     }

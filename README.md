@@ -288,9 +288,11 @@ claude plugin eval claude-code-route
 that reason: a discipline that cannot be cheap on a typo gets turned off, and is then absent for the
 migration too.
 
-The suite is **unverified** — `claude plugin eval` is in early access and was unavailable on the
-account it was authored under, so no case here has been executed and the field names follow the
-CLI help rather than a successful run. `evals/README.md` says what would close that.
+The runner is still in early access on this account, so the suite has never run under it. One case
+was measured by hand instead: `proof-gate` scored **0 with the skill absent and 1 with it invoked**,
+on both its graders. The same run surfaced something the score does not say — in headless mode the
+skill did not auto-invoke, and had to be named. `evals/README.md` carries the transcripts and what
+would close the rest.
 
 ## Scope
 

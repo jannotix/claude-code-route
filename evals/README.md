@@ -28,11 +28,32 @@ gates.
 
 ## Status
 
-**Unverified.** `claude plugin eval` reports `currently in early access` on the account this suite
-was authored under, so no case here has ever been executed and the schema below follows the CLI's
-own `--help` output rather than a successful run. What would close it: an account with the feature
-enabled, one `claude plugin eval claude-code-route` run, and the field names corrected against
-whatever the runner actually accepts.
+`claude plugin eval` still reports `currently in early access` on this account, so the runner has
+never executed the suite and the field names below follow the CLI's `--help` rather than a
+successful run. Structure is checked in CI: manifest declaration, case names, grader references,
+unreferenced graders, and that every grader states both a 1 and a 0 condition.
 
-Writing an unverified suite and calling it tested is precisely the failure this skill exists to
-prevent, so it is recorded here instead.
+**Discrimination is measured on one case.** `proof-gate` was run by hand — the prompt through
+`claude -p` against a scaffolded repository, twice, then each response graded by its own two rubrics
+with a Haiku judge:
+
+| Grader | Skill not invoked | Skill invoked |
+| --- | --- | --- |
+| `executed-proof.md` | **0** | **1** |
+| `named-gap.md` | **0** | **1** |
+
+The two responses are why. Without the skill: *"Done. Changed rounding.py to use half-to-even
+rounding via ROUND_HALF_EVEN."* — the change was correct and nothing was run, which is the failure
+the case exists to catch. With it: a plan, a declared scope, five acceptance tests created and
+executed, and every requirement closed by a named execution with real values.
+
+**And the finding that matters more than the score.** In headless `claude -p`, the skill did **not
+auto-invoke** on that prompt. It had to be named. The delta above is therefore between *skill
+invoked* and *skill absent*, not between *plugin installed* and *plugin absent*, and the real
+`--ablation with-without` arm would likely measure closer to zero until the skill fires on its own.
+The suite's `tool_used: Skill` indicator exists to separate exactly these two things, and this run
+is the first evidence that they need separating.
+
+What would still close it: an account with the runner enabled, one `claude plugin eval
+claude-code-route`, the field names corrected against what it accepts, and the other three cases
+measured the way `proof-gate` now has been.
