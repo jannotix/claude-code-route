@@ -53,7 +53,9 @@ requirement — before anything is written.
 
 **Nothing closes on a read.** Reading the diff is not review. A requirement closes on a test that
 ran, a command whose output is recorded, or a flow that was driven. The linter rejects a proof cell
-that says "verified by inspection".
+that says "verified by inspection" — and one that says "checked", or "all green", or any bare
+phrase. A proof must name a path, a test id, a flag, a call, an extension, or a runner with an
+argument.
 
 ## The three roles
 

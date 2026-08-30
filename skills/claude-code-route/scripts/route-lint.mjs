@@ -92,14 +92,38 @@ function tableRows(sec) {
 const isPlaceholder = (s) => s === '' || /^<.*>$/.test(s) || s === '—' || s === '-' || s === '...';
 
 // A backticked span alone is not evidence: `checked` is a word, `pytest tests/x.py::t` is a thing
-// that ran. What separates them is a character a bare English word cannot contain — a path
-// separator, a test-id colon pair, a flag, a call, a file extension — or a second token, since a
-// command with arguments is a command.
-const EXECUTABLE = /[/\\]|::|--|\(\)|\s|\.[a-z]{1,4}\b/;
+// that ran. Two signals separate them. Either the span carries a character a bare phrase cannot —
+// a path separator, a test-id colon pair, a flag, a call, a file extension — or it starts with the
+// name of something that runs and takes an argument. Whitespace alone is not enough: `a b` is two
+// words, not a command.
+// The extension needs two letters or more: a one-letter one matches the dots in "e.g." and
+// "i.e.", which is prose.
+const STRUCTURAL = /[/\\]|::|--|\(\)|\.[a-z]{2,4}\b/;
+
+// The escape hatch for a runner this list has never heard of: `$ mytool check` says, explicitly,
+// that what follows was run. A heuristic cannot decide that, and an author can.
+const EXPLICIT_COMMAND = /^\$\s+\S/;
+
+const RUNNER = new RegExp('^(' + [
+  'pytest', 'python[0-9.]*', 'py', 'tox', 'nox', 'hatch', 'uv', 'poetry', 'pip[0-9]*',
+  'node', 'npm', 'npx', 'pnpm', 'yarn', 'deno', 'bun', 'jest', 'vitest', 'mocha', 'tsc',
+  'go', 'cargo', 'rustc', 'clippy', 'gofmt', 'gotest',
+  'make', 'just', 'task', 'cmake', 'ctest', 'bazel', 'buck', 'ninja', 'meson',
+  'mvn', 'gradle', 'gradlew', 'dotnet', 'msbuild', 'nuget',
+  'ruby', 'rake', 'bundle', 'rspec', 'php', 'composer', 'phpunit', 'pest',
+  'dart', 'flutter', 'swift', 'xcodebuild', 'mix', 'lein', 'sbt', 'stack', 'cabal',
+  'bash', 'sh', 'zsh', 'pwsh', 'powershell', 'docker', 'podman', 'kubectl', 'helm',
+  'terraform', 'ansible', 'psql', 'mysql', 'sqlite3', 'mongosh', 'redis-cli',
+  'curl', 'wget', 'http', 'k6', 'ab', 'wrk', 'hyperfine',
+  'eslint', 'ruff', 'mypy', 'black', 'prettier', 'shellcheck', 'golangci-lint',
+].join('|') + ')\\b', 'i');
 
 function looksExecutable(proof) {
   for (const m of proof.matchAll(/`([^`]{3,})`/g)) {
-    if (EXECUTABLE.test(m[1])) return true;
+    const span = m[1].trim();
+    if (EXPLICIT_COMMAND.test(span)) return true;
+    if (STRUCTURAL.test(span)) return true;
+    if (/\s/.test(span) && RUNNER.test(span)) return true;
   }
   return false;
 }
@@ -150,6 +174,11 @@ function checkPlan(planPath, stage, layers) {
     if (d.kind === 'NFR' && !/\d/.test(d.text.replace(/^\s*NFR-\d+/, ''))) {
       report('warn', planPath, d.line, 'nfr-no-measurement',
         `${d.id} carries no number; a requirement without a measurement cannot fail`);
+    }
+    // An invariant is not placed in the Placement table; it names its owner where it is stated.
+    if (d.kind === 'INV' && !/\bOwner:\s*\S/.test(d.text)) {
+      report('error', planPath, d.line, 'invariant-unowned',
+        `${d.id} names no owner; an invariant with none is enforced by convention, which is to say sometimes`);
     }
   }
   for (const ac of acs) {
@@ -229,14 +258,24 @@ function checkFindings(planPath, text) {
   // Locate the columns by header. A table with a column missing or moved must still be
   // checked: skipping it whole is how a finding closes with no verification at all.
   const header = tableHeader(sec);
+  // Exact before substring: a "Unverified reason" column must not answer to "verified".
   const at = (name, fallback) => {
-    const i = header.findIndex((h) => h.includes(name));
-    return i === -1 ? fallback : i;
+    const exact = header.indexOf(name);
+    if (exact !== -1) return exact;
+    const loose = header.findIndex((h) => h.split(/\s+/).includes(name));
+    return loose === -1 ? fallback : loose;
   };
   const iClass = at('class', 1);
   const iSummary = at('summary', 3);
   const iVerified = at('verified', -1);
   const iOutcome = at('outcome', -1);
+
+  // A table that cannot express resolution is malformed once, not once per row: an open
+  // finding is not a finding acted on without verification.
+  if (iOutcome === -1 && tableRows(sec).some((r) => !isPlaceholder(r.cells[iSummary] ?? ''))) {
+    report('error', planPath, sec.offset, 'findings-no-outcome',
+      'The Findings table has no Outcome column, so no finding in it can be shown as resolved');
+  }
 
   for (const row of tableRows(sec)) {
     const cells = row.cells;
@@ -247,12 +286,8 @@ function checkFindings(planPath, text) {
 
     if (summary === undefined || isPlaceholder(summary)) continue;
     if (/^noise$/i.test(cls ?? '')) continue;
+    if (iOutcome === -1) continue;
 
-    if (iOutcome === -1) {
-      report('error', planPath, row.line, 'finding-unverified',
-        'The Findings table has no Outcome column, so no finding in it can be shown as resolved');
-      continue;
-    }
     if (/^(fixed|confirmed)$/i.test(outcome ?? '') && isPlaceholder(verified)) {
       report('error', planPath, row.line, 'finding-unverified',
         'A finding was acted on with no verification step recorded; a finding is a claim, not a truth');

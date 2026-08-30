@@ -124,4 +124,18 @@ closed with a test that fails on the pre-fix revision:
 
 The first of these immediately caught a case in this repository's own test fixtures.
 
+A fourth followed, in the repair of the second: whitespace alone still made a command, so `a b`
+closed a requirement. Then an adversarial round over that repair found six more, all confirmed:
+
+- `e.g. checked` still closed the gate, because a one-letter extension counted as a file extension.
+- `mytool check` was refused, because the runner list cannot enumerate every project's tooling.
+  A `$ ` prefix now declares a span an executed command outright.
+- A `Unverified reason` column answered for `Verified`, because the lookup matched substrings.
+  Columns are located by exact header first.
+- An invariant with no owner passed every gate, though the reference requires exactly one.
+- The missing-Outcome rule fired once per row, making an open finding look like one closed without
+  verification. It is one defect of the table, reported once.
+- The plan claimed a 25-case probe while citing a test that held 16. The test now holds 30 and the
+  plan says 30.
+
 [1.0.0]: https://github.com/jannotix/claude-code-route/releases/tag/claude-code-route--v1.0.0

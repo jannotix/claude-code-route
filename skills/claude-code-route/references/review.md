@@ -212,6 +212,30 @@ PROOF-1  tests/billing/test_credit.py::test_exceeds_cumulative
 If it passes on the old code, the test does not describe the defect. Add the sibling case too: the
 report named one input, the root cause covers a family.
 
+## What the linter accepts as a proof
+
+`route-lint` cannot run your proof, so it checks the only thing a string can carry: whether it names
+something that *could* have run. A proof cell closes a requirement when a backticked span either
+
+- carries a structural signal a bare phrase cannot — a path separator, a `::` test id, a `--` flag,
+  a `()` call, or a file extension; or
+- begins with the name of something that runs, and takes an argument: `npm test`, `make check`,
+  `dotnet test`, `docker compose up -d`; or
+- begins with `$ `, which declares the rest an executed command. Use it for tooling the list has
+  never heard of: `$ mytool check`. A heuristic cannot know your tools; you can tell it.
+
+It rejects judgement outright — *by inspection*, *reviewed*, *looks correct*, *should work*, *n/a* —
+and it rejects a bare phrase, including a two-word one: `a b`, `all green`, `manual check`.
+
+It is an error rather than a warning because this is the gate the product exists for, and the
+alternative accepted every English word. Both of its earlier edges were closed after a reviewer
+declined to accept them as documented trade-offs: a one-letter extension no longer counts, so
+`e.g. checked` is refused, and the `$` prefix covers a runner the list does not know.
+
+**It is not a substitute for the reviewer.** A test named for a requirement it never exercises
+passes the linter and fails the second attack axis. The linter checks that a proof was named; only
+an execution and a reviewer check that it is the right one.
+
 ## Named gaps
 
 A requirement that could not be proven is written out, not omitted:
