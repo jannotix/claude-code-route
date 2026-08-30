@@ -138,4 +138,23 @@ closed a requirement. Then an adversarial round over that repair found six more,
 - The plan claimed a 25-case probe while citing a test that held 16. The test now holds 30 and the
   plan says 30.
 
+### The proof rule, after four rounds
+
+A third adversarial round found two more BLOCKERs in the same predicate — `$ # comment only`,
+`README.md` and `pass/fail` all closed a requirement, while `pytest` alone was refused — plus a
+column lookup that let `Not verified` answer for `Verified`, a qualified outcome like
+`fixed under REQ-004` going unchecked in the very form this project's own plans use, a three-column
+table suppressing every check, and the template's own owner placeholder counting as an owner.
+
+Four rounds, four sets of false negatives in one requirement. That is the repeat rule's signature,
+and the answer was not another patch: no string can prove that something ran, so the inference from
+a span's characters is gone. A proof cell names a program the tool knows, or the author writes `$ `
+and takes responsibility. Both are decidable, and the surface stops widening with each repair.
+
+### Measured, not asserted
+
+`proof-gate` was executed by hand against a scaffolded repository and graded by its own rubrics:
+**0 on both graders without the skill, 1 on both with it.** The same runs showed the skill does not
+auto-invoke in headless mode, which the score alone would have hidden.
+
 [1.0.0]: https://github.com/jannotix/claude-code-route/releases/tag/claude-code-route--v1.0.0

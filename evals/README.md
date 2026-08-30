@@ -37,10 +37,16 @@ unreferenced graders, and that every grader states both a 1 and a 0 condition.
 `claude -p` against a scaffolded repository, twice, then each response graded by its own two rubrics
 with a Haiku judge:
 
-| Grader | Skill not invoked | Skill invoked |
-| --- | --- | --- |
-| `executed-proof.md` | **0** | **1** |
-| `named-gap.md` | **0** | **1** |
+| Grader | Not invoked | Not invoked, after the description was rewritten | Invoked |
+| --- | --- | --- | --- |
+| `executed-proof.md` | **0** | **0** | **1** |
+| `named-gap.md` | **0** | **1** | **1** |
+
+The middle column is a second measurement. The skill's description was rewritten after the first run
+to lead with the situations that should trigger it rather than with what it is. That moved one
+grader from 0 to 1 and left the other at 0: the answer became more honest about what it had run, and
+the skill still did not fire. The rewrite is kept because it is a better description and it measured
+better, not because it solved anything.
 
 The two responses are why. Without the skill: *"Done. Changed rounding.py to use half-to-even
 rounding via ROUND_HALF_EVEN."* — the change was correct and nothing was run, which is the failure
@@ -48,7 +54,7 @@ the case exists to catch. With it: a plan, a declared scope, five acceptance tes
 executed, and every requirement closed by a named execution with real values.
 
 **And the finding that matters more than the score.** In headless `claude -p`, the skill did **not
-auto-invoke** on that prompt. It had to be named. The delta above is therefore between *skill
+auto-invoke** on that prompt, before or after the description was rewritten. It had to be named. The delta above is therefore between *skill
 invoked* and *skill absent*, not between *plugin installed* and *plugin absent*, and the real
 `--ablation with-without` arm would likely measure closer to zero until the skill fires on its own.
 The suite's `tool_used: Skill` indicator exists to separate exactly these two things, and this run

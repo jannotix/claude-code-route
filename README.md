@@ -289,9 +289,10 @@ that reason: a discipline that cannot be cheap on a typo gets turned off, and is
 migration too.
 
 The runner is still in early access on this account, so the suite has never run under it. One case
-was measured by hand instead: `proof-gate` scored **0 with the skill absent and 1 with it invoked**,
-on both its graders. The same run surfaced something the score does not say — in headless mode the
-skill did not auto-invoke, and had to be named. `evals/README.md` carries the transcripts and what
+was measured by hand instead: `proof-gate` scored **0 on both graders with the skill absent and 1 on
+both with it invoked**. The same runs surfaced something the score does not say — in headless mode
+the skill did not auto-invoke and had to be named, before or after its description was rewritten to
+trigger better. `evals/README.md` carries the transcripts and what
 would close the rest.
 
 ## Scope
