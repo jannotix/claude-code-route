@@ -4,6 +4,12 @@ runs: 3
 max_turns: 12
 timeout_seconds: 600
 tags: [depth, budget]
+scaffold_script: |
+  cat > README.md <<'MD'
+  # Ledger
+
+  Ledger posts entries as they arrive. Downstream systems recieve them in order.
+  MD
 graders:
   - file: graders/no-ceremony.md
   - file: graders/still-verified.md

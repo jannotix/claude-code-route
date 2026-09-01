@@ -51,23 +51,27 @@ REQ-002  A proof cell must name something that could have been executed, not mer
   AC-002.3  Given a proof cell of `npm test` When the plan is checked Then nothing is reported, because a command with arguments is executable
 
 REQ-003  A finding recorded as acted on must be checked for a verification step whatever the column count of its table.
-  AC-003.1  Given a five-column Findings table with a row marked fixed and no Verified column When the plan is checked Then finding-unverified is reported
+  AC-003.1  Given a five-column Findings table with a row marked fixed and no Verified column When the plan is checked Then findings-no-verified is reported once for the table, not finding-unverified per row, because a table that cannot record verification is malformed rather than unverified (superseded by REQ-008)
   AC-003.2  Given a six-column table whose Verified cell is filled When the plan is checked Then nothing is reported
 
 REQ-004  Two bare words must not count as a command, and neither must a dotted abbreviation.
   AC-004.1  Given a proof cell of `a b` When the plan is checked Then proof-not-executed is reported
   AC-004.2  Given a proof cell of `npm test` When the plan is checked Then nothing is reported
-  AC-004.3  Given a proof cell of `./mytool check` When the plan is checked Then nothing is reported
+  AC-004.3  Given a proof cell of `./mytool check` When the plan is checked Then proof-not-executed is reported, because a path this list has never heard of is a name until the author marks it
   AC-004.4  Given a proof cell of `e.g. checked` When the plan is checked Then proof-not-executed is reported
 
 REQ-005  An author must be able to declare a span an executed command, and the marker must be followed by a program.
   AC-005.1  Given a proof cell of `$ mytool check` When the plan is checked Then nothing is reported
   AC-005.2  Given a proof cell of `mytool check` without the prefix When the plan is checked Then proof-not-executed is reported
   AC-005.3  Given a proof cell of `$ # comment only` When the plan is checked Then proof-not-executed is reported, because a marker followed by a comment marks nothing
+  AC-005.4  Given a proof cell of `$ && checked` When the plan is checked Then proof-not-executed is reported, because a shell operator is not a program
+  AC-005.5  Given a proof cell of `$ /bin/true` When the plan is checked Then nothing is reported, because an absolute path is a program and not a comment
 
-REQ-010  A span that is not a command must not close a requirement, whatever characters it contains.
+REQ-010  A span that is not a command must not close a requirement, whatever characters it contains. A span names a runner only when the whole program is that runner, and a runner of any length counts.
   AC-010.1  Given a proof cell of `README.md` When the plan is checked Then proof-not-executed is reported
   AC-010.2  Given a proof cell of `pass/fail` When the plan is checked Then proof-not-executed is reported
+  AC-010.3  Given a proof cell of `go.mod` When the plan is checked Then proof-not-executed is reported, because a filename that begins with a runner is not that runner
+  AC-010.4  Given a proof cell of `go` When the plan is checked Then nothing is reported, because a two-letter runner is a runner
   AC-010.3  Given a proof cell of `pytest` When the plan is checked Then nothing is reported, because a named runner needs no argument
 
 REQ-011  A Findings table that cannot show what confirmed a finding must be reported, and a qualified outcome must count as acted on.
@@ -75,9 +79,11 @@ REQ-011  A Findings table that cannot show what confirmed a finding must be repo
   AC-011.2  Given an Outcome cell of `fixed under REQ-004` with an empty Verified cell When the plan is checked Then finding-unverified is reported
   AC-011.3  Given a three-column Findings table with one row When the plan is checked Then findings-no-outcome is reported
 
-REQ-012  An unfilled owner placeholder must not count as an owner, and two owners must be reported.
+REQ-012  An unfilled owner placeholder must not count as an owner, and an Owner cell that separates two names must be reported.
   AC-012.1  Given INV-001 whose Owner is the template placeholder When the plan is checked Then invariant-unowned is reported
-  AC-012.2  Given INV-001 naming two owners When the plan is checked Then invariant-two-owners is reported
+  AC-012.2  Given INV-001 whose Owner cell separates two names with a comma, a slash, an ampersand
+            or the word `and` in any case When the plan is checked Then invariant-two-owners is reported
+  AC-012.3  Given INV-001 whose single owner is `Order.applyDiscount` When the plan is checked Then nothing is reported, because a dotted symbol is one name
 
 REQ-006  An invariant must name its owner where it is stated.
   AC-006.1  Given INV-001 with no Owner When the plan is checked Then invariant-unowned is reported
@@ -96,9 +102,9 @@ REQ-008  A Findings table that cannot express resolution must be reported once, 
 | REQ | Rule | Home | Layer |
 | --- | --- | --- | --- |
 | REQ-001 | Every requirement and NFR needs a home | `checkPlacement` | application |
-| REQ-002 | Judgement is refused outright | `PROSE_PROOF` in `checkProof` | application |
+| REQ-002 | Judgement is refused outright | `PROSE_PROOF`, then `looksExecutable` | application |
 | REQ-003 | Findings columns are located by header, not by position | `checkFindings` | application |
-| REQ-004 | A span is a command or it is not; nothing is inferred from its characters | `commandOf` | domain |
+| REQ-004 | A span is a command or it is not; nothing is inferred from its characters | `commandOf`, then `looksExecutable` | domain |
 | REQ-005 | The `$` marker must be followed by a program | `commandOf` | domain |
 | REQ-010 | Only a named runner or a marked span closes a requirement | `looksExecutable` over `RUNNER` | domain |
 | REQ-011 | Findings columns are located exactly; a qualified outcome is acted on | `checkFindings` | application |
@@ -113,7 +119,7 @@ that are about orchestration, and D2 is squarely the former.
 
 ## Scope
 
-    skills/claude-code-route/scripts/route-lint.mjs, skills/claude-code-route/references/review.md, ../tests-debug/**, docs/route/plans/lint-false-negatives/**, route.config.json, CHANGELOG.md, README.md
+    skills/claude-code-route/scripts/route-lint.mjs, skills/claude-code-route/references/review.md, skills/claude-code-route/SKILL.md, ../tests-debug/**, docs/route/plans/lint-false-negatives/**, docs/route/HISTORY.jsonl, evals/**, route.config.json, CHANGELOG.md, README.md
 
 ## Out of scope
 
@@ -212,17 +218,17 @@ against the artifact it was written for.
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | `node tests-debug/route-lint.test.mjs` — "an NFR with no home is reported"; fails on the pre-fix revision | pass |
-| REQ-002 | `node tests-debug/route-lint.test.mjs` — "a proof of `checked` is rejected", plus the two acceptance cases; fails on the pre-fix revision | pass |
-| REQ-003 | `node tests-debug/route-lint.test.mjs` — "a findings table with no Verified column is reported"; fails on a faithful D3-only revert | pass |
-| REQ-004 | `node tests-debug/route-lint.test.mjs` — the accept and reject probe over 30 spans, including `e.g. checked`; fails on the whitespace-alone predicate | pass |
-| REQ-005 | `node tests-debug/route-lint.test.mjs` — "the $ prefix accepts an unknown runner" | pass |
-| REQ-006 | `node tests-debug/route-lint.test.mjs` — "an invariant with no owner is reported" and its negative | pass |
-| REQ-007 | `node tests-debug/route-lint.test.mjs` — "a lookalike header does not answer for Verified" | pass |
-| REQ-008 | `node tests-debug/route-lint.test.mjs` — "a table with no Outcome column is reported once, as its own defect" | pass |
-| REQ-010 | `node tests-debug/route-lint.test.mjs` — "a filename is not a command", "a runner needs no argument", "an unknown program needs the marker", and the 36-span probe | pass |
-| REQ-011 | `node tests-debug/route-lint.test.mjs` — "a findings table with no Verified column is reported", plus the qualified-outcome and three-column probes | pass |
-| REQ-012 | `node tests-debug/route-lint.test.mjs` — the placeholder and two-owner probes | pass |
+| REQ-001 | `node ../tests-debug/route-lint.test.mjs` — "an NFR with no home is reported"; fails on the pre-fix revision | pass |
+| REQ-002 | `node ../tests-debug/route-lint.test.mjs` — "a proof of `checked` is rejected", plus the two acceptance cases; fails on the pre-fix revision | pass |
+| REQ-003 | `node ../tests-debug/route-lint.test.mjs` — "a findings table with no Verified column is reported"; fails on a faithful D3-only revert | pass |
+| REQ-004 | `node ../tests-debug/route-lint.test.mjs` — the accept and reject probe over 30 spans, including `e.g. checked`; fails on the whitespace-alone predicate | pass |
+| REQ-005 | `node ../tests-debug/route-lint.test.mjs` — "the $ prefix accepts an unknown runner", "the marker needs a program, not an operator", "an absolute path is a program, not a comment" | pass |
+| REQ-006 | `node ../tests-debug/route-lint.test.mjs` — "an invariant with no owner is reported" and its negative | pass |
+| REQ-007 | `node ../tests-debug/route-lint.test.mjs` — "a lookalike header does not answer for Verified" | pass |
+| REQ-008 | `node ../tests-debug/route-lint.test.mjs` — "a table with no Outcome column is reported once, as its own defect" | pass |
+| REQ-010 | `node ../tests-debug/route-lint.test.mjs` — "a filename that starts with a runner is not one", "a two-letter runner is a runner", "a program that merely starts with a runner is not one", and the 46-span probe | pass |
+| REQ-011 | `node ../tests-debug/route-lint.test.mjs` — "an outcome qualified by a requirement still counts as acted on", "a three-column table is not read as empty", "Result does not answer for Outcome" | pass |
+| REQ-012 | `node ../tests-debug/route-lint.test.mjs` — "a template placeholder is not an owner", "two owners are reported" | pass |
 
 Each of the three was reverted in isolation and the corresponding assertion failed, which is what a
 defect fix owes: a test that fails on the code as it was.
@@ -252,21 +258,58 @@ now needs two letters. `mytool check` was rejected because the runner list had n
 heuristic cannot guess. It is an error rather than a warning because the Review gate is the
 product's central claim, and what it replaced accepted every English word.
 
+## Round 4
+
+Ran 2026-09-01 with `.route/` emptied first, over the round-3 repairs. **Ten findings, ten confirmed
+by execution, none refuted.** The prediction above — that a fourth round would find something — held.
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 4.1 | DEFECT | BLOCKER | The `$` marker accepted an operator as a program | confirmed: `` `$ && checked` `` closed a requirement and `` `$ /bin/true` `` did not | fixed, AC-005.4, AC-005.5 |
+| 4.2 | DEFECT | BLOCKER | A word boundary let a filename match the runner it starts with | confirmed: `` `go.mod` `` closed a requirement and `` `go` `` did not | fixed, AC-010.3, AC-010.4 |
+| 4.3 | DEFECT | MAJOR | AC-004.3 required the opposite of what the redesign does | confirmed by reading AC-004.3 against the reject probe | plan amended |
+| 4.4 | DEFECT | MAJOR | The five-column case emits `findings-no-verified`, not the code AC-003.1 names | confirmed by running the fixture | plan amended, the once-per-table rule wins |
+| 4.5 | DEFECT | MAJOR | `Verification` and `Result` aliased columns the plan calls exact | confirmed by reading `route-lint.mjs:288` | fixed, one spelling each |
+| 4.6 | UNDERSPECIFIED | MAJOR | The plan never said how two owners are written | confirmed: `Owner: Foo & Bar` passed | fixed, AC-012.2 names the separators |
+| 4.7 | SCOPE | MAJOR | `SKILL.md`, `evals/`, `HISTORY.jsonl` and `review.md` were edited outside Scope | confirmed by `git diff --name-only` | scope amended |
+| 4.8 | UNPROVEN | BLOCKER | Every recorded proof command fails from the repository root | confirmed: `node tests-debug/route-lint.test.mjs` exits 1, the file is a sibling | fixed, all 11 rows repathed |
+| 4.9 | UNPROVEN | MAJOR | Four probes the Proof table claimed did not exist | confirmed: `grep` for each returned 0 | fixed, all four written |
+| 4.10 | MISPLACED | MAJOR | REQ-002 and REQ-004 are decided in `looksExecutable`, not their declared homes | confirmed by reading the three functions | placement corrected |
+
+**The repeat rule fired for the fifth time on the proof predicate**, and this time it was right not
+to route to Plan. Rounds 1 to 4 each found the rule itself wrong — `checked`, `a b`, `e.g. checked`,
+`README.md` — and round 3 answered by removing the inference from a span's characters. 4.1 and 4.2
+are not that failure returning: the rule is unchanged and correct, and what was wrong was a length
+floor of three characters and a `` where `$` belonged. Two leftovers of the design that was
+deleted. Fixing them at Execute is the routing test applied honestly: neither changes what must be
+true.
+
+The predicate is now probed over **46 spans**, 21 that must close a requirement and 25 that must not,
+including every false negative and false positive any of the four rounds produced.
+
 ## Verdict
 
 Delivered with gaps.
 
-Twenty-two findings across three rounds — four found by probing, seven by the first adversarial
-round, eleven by the second — every one confirmed, none refuted. Of those, eighteen are `DEFECT`;
-the rest are one `UNDERSPECIFIED`, two `MISPLACED`, one `SCOPE`, one `WRONG-PLAN` and one
-`UNPROVEN`. 123 checks pass.
+**Thirty-two findings across four rounds** — four by probing, seven, then eleven, then ten by
+adversarial review — every one confirmed by executing its verification step, none refuted. 138 checks
+pass, and both gates report 0 errors.
 
-One gap, and it is the same one each round leaves: the round-3 repairs have not been attacked. The
-reviewer's account limit was reached during this round, and the companion review of the other
-candidate did not run at all. On a record of four, then seven, then eleven, a fourth round would
-find something.
+The gap is the one this cycle has never closed and cannot close from inside itself: **the round-4
+repairs have not been attacked.** They are covered by probes that fail on the pre-fix code, which is
+what a repair owes, and that is not the same as having been looked for. On a record of four, seven,
+eleven, ten, a fifth round would find something. What would close it: one more adversarial round,
+`.route/` emptied first.
+
+`looksExecutable` decides whether a span names a command. It cannot decide whether the command named
+was the right one — that is the reviewer's job, and no linter takes it.
 
 ## Amendments
+
+AC-003.1  amended 2026-09-01 after review round 4 (4.4): it named `finding-unverified`, which REQ-008
+          superseded when the once-per-table rule was added. The code was right and the criterion stale.
+AC-004.3  amended 2026-09-01 after review round 4 (4.3): it required `./mytool check` to close a
+          requirement, which the round-3 redesign deliberately stopped doing. The marker is the route now.
 
 REQ-004  added 2026-08-30: the first repair of D2 accepted whitespace alone, so `a b` still closed a
          requirement. The predicate now needs a structural signal or a named runner with an

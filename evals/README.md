@@ -28,38 +28,63 @@ gates.
 
 ## Status
 
-`claude plugin eval` still reports `currently in early access` on this account, so the runner has
-never executed the suite and the field names below follow the CLI's `--help` rather than a
-successful run. Structure is checked in CI: manifest declaration, case names, grader references,
-unreferenced graders, and that every grader states both a 1 and a 0 condition.
+`claude plugin eval` accepts `--help` on this account but still answers `currently in early access`
+on every execution, including `init`, re-checked 2026-09-01. The runner has never executed the suite.
 
-**Discrimination is measured on one case.** `proof-gate` was run by hand — the prompt through
-`claude -p` against a scaffolded repository, twice, then each response graded by its own two rubrics
-with a Haiku judge:
+Each case now carries a `scaffold_script`, so it builds its own repository and needs no hand
+scaffolding when the runner opens. The field name is the one the CLI's `--scaffold` help gives. Every
+block was extracted with a YAML parser and passed through `bash -n`, and all four were executed to
+build the arms measured below. Structure is checked in CI: manifest declaration, case names, grader
+references, unreferenced graders, and that every grader states both a 1 and a 0 condition.
 
-| Grader | Not invoked | Not invoked, after the description was rewritten | Invoked |
-| --- | --- | --- | --- |
-| `executed-proof.md` | **0** | **0** | **1** |
-| `named-gap.md` | **0** | **1** | **1** |
+## Measured, by hand
 
-The middle column is a second measurement. The skill's description was rewritten after the first run
-to lead with the situations that should trigger it rather than with what it is. That moved one
-grader from 0 to 1 and left the other at 0: the answer became more honest about what it had run, and
-the skill still did not fire. The rewrite is kept because it is a better description and it measured
-better, not because it solved anything.
+All four cases were run on 2026-09-01, both arms each, in an isolated session — `claude --restricted
+--plugin-dir <this plugin>` for the *with* arm and no plugin for the *without* arm — then graded
+against each case's own rubrics by a Haiku judge.
 
-The two responses are why. Without the skill: *"Done. Changed rounding.py to use half-to-even
-rounding via ROUND_HALF_EVEN."* — the change was correct and nothing was run, which is the failure
-the case exists to catch. With it: a plan, a declared scope, five acceptance tests created and
-executed, and every requirement closed by a named execution with real values.
+| Case | with | without | delta | skill fired on its own |
+| --- | --- | --- | --- | --- |
+| `plan-gate` | **2/2** | 1/2 | **+1** | **yes** |
+| `proof-gate` | **2/2** | 0/2 | **+2** | no — invoked by name |
+| `depth-scales` | 2/2 | 2/2 | 0 | no |
+| `comment-voice` | 2/2 | 2/2 | 0 | no |
 
-**And the finding that matters more than the score.** In headless `claude -p`, the skill did **not
-auto-invoke** on that prompt, before or after the description was rewritten. It had to be named. The delta above is therefore between *skill
-invoked* and *skill absent*, not between *plugin installed* and *plugin absent*, and the real
-`--ablation with-without` arm would likely measure closer to zero until the skill fires on its own.
-The suite's `tool_used: Skill` indicator exists to separate exactly these two things, and this run
-is the first evidence that they need separating.
+`plan-gate` is the one case measured end to end as a plugin: the skill fired by itself, wrote
+`docs/route/plans/discount-code/PLAN.md` with a placement table mapping REQ-001..004 to named symbols
+and a layer, and only then wrote source. The baseline named symbols in prose but produced no table
+and left the layer implicit, which is `placement-table` scoring 0.
 
-What would still close it: an account with the runner enabled, one `claude plugin eval
-claude-code-route`, the field names corrected against what it accepts, and the other three cases
-measured the way `proof-gate` now has been.
+`proof-gate` is the largest delta and the weakest evidence, because the skill had to be named. Without
+it: *"Done. Changed rounding.py to use ROUND_HALF_EVEN."* — correct edit, nothing executed, which is
+exactly the failure the case exists to catch. With it: a plan, a declared scope, five tests created
+and executed, every requirement closed by a named execution.
+
+`depth-scales` scoring 2/2 in both arms is the result it is designed for. It is a guard-rail, not a
+discrimination case: it fails on over-application, and equal arms mean the discipline did not make a
+typo expensive. It stays for that reason, and the delta is not the number to read on it.
+
+**`comment-voice` does not discriminate and should be rewritten or deleted.** Both arms scored 2/2:
+the model writes a constraint-carrying comment for this prompt without any help. By the rule at the
+top of this file that makes it a measurement of the model, and it is recorded here rather than
+quietly kept.
+
+## What auto-invocation actually depends on
+
+The earlier claim in this file — that the skill does not auto-invoke headless — was measured on one
+prompt and generalised too far. Two things were found on 2026-09-01, both by execution.
+
+**Roster size decides whether the description is read at all.** On a machine with 466 plugin skills
+installed, a headless session lists this skill as the bare name `claude-code-route:claude-code-route`
+with no description; asked to quote it, the model reports there is none. Loaded alone with
+`--plugin-dir`, the same probe quotes it back: *"Use when changing code that has to actually work"*.
+A description the model never sees cannot trigger anything, and no rewrite of it can fix that.
+
+**Blast radius decides whether it fires.** With the description visible, the skill invoked itself on
+`plan-gate` — a real capability with four requirements — and did not on `proof-gate`, `depth-scales`
+or `comment-voice`, all of which are one file or less. On `depth-scales` that is the depth rule
+working. On `proof-gate` it is a genuine miss: the change is small and the reporting failure is not.
+
+So the honest statement is narrower than the old one: **the skill fires on work with blast radius,
+provided its description is visible.** Name it or run `/claude-code-route` for small changes, and on
+a machine with hundreds of skills installed, name it regardless.

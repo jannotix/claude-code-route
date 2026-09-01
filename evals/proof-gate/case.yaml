@@ -4,6 +4,15 @@ runs: 3
 max_turns: 30
 timeout_seconds: 900
 tags: [review, proof]
+scaffold_script: |
+  mkdir -p src/pricing
+  cat > src/pricing/rounding.py <<'PY'
+  from decimal import Decimal, ROUND_HALF_UP
+
+
+  def round_money(amount: Decimal) -> Decimal:
+      return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+  PY
 graders:
   - file: graders/executed-proof.md
   - file: graders/named-gap.md

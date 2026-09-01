@@ -112,9 +112,13 @@ const RUNNER = new RegExp('^(' + [
   'terraform', 'ansible', 'psql', 'mysql', 'sqlite3', 'mongosh', 'redis-cli',
   'curl', 'wget', 'http', 'k6', 'ab', 'wrk', 'hyperfine',
   'eslint', 'ruff', 'mypy', 'black', 'prettier', 'shellcheck', 'golangci-lint',
-].join('|') + ')\\b', 'i');
+].join('|') + ')$', 'i');
 
-const COMMENT_TOKEN = /^[#;/]/;
+// A program name opens on a letter, a digit, or a path character. A span opening on a shell
+// operator is punctuation the author left behind, not a command they ran: `$ && checked`
+// marked nothing. (REQ-005)
+const PROGRAM_TOKEN = /^[A-Za-z0-9._~/\\-]/;
+const COMMENT_TOKEN = /^(#|;|\/\/)/;
 
 // The command a span names, or null if it names none.
 function commandOf(span) {
@@ -123,12 +127,14 @@ function commandOf(span) {
   if (!body) return null;
   const [program, ...args] = body.split(/\s+/);
   // `$ # comment only` marks nothing: the marker must be followed by a program.
-  if (!program || COMMENT_TOKEN.test(program)) return null;
+  if (!program || COMMENT_TOKEN.test(program) || !PROGRAM_TOKEN.test(program)) return null;
   return { explicit, program, args };
 }
 
 function looksExecutable(proof) {
-  for (const m of proof.matchAll(/`([^`]{3,})`/g)) {
+  // No length floor. `go`, `py`, `sh` and `ab` are runners this list names, and a floor of
+  // three characters refused every one of them while `go.mod` passed as `go`.
+  for (const m of proof.matchAll(/`([^`]+)`/g)) {
     const cmd = commandOf(m[1].trim());
     if (cmd === null) continue;
     if (cmd.explicit) return true;
@@ -192,7 +198,7 @@ function checkPlan(planPath, stage, layers) {
       if (!named || /^<.*>$/.test(named) || named === '?') {
         report('error', planPath, d.line, 'invariant-unowned',
           `${d.id} names no owner; an invariant with none is enforced by convention, which is to say sometimes`);
-      } else if (/,| and /.test(named)) {
+      } else if (/[,/&]|\s+and\s+/i.test(named)) {
         report('error', planPath, d.line, 'invariant-two-owners',
           `${d.id} names more than one owner; two enforcements of one rule drift apart`);
       }
@@ -284,9 +290,11 @@ function checkFindings(planPath, text) {
     }
     return -1;
   };
+  // One spelling each. The plan says these columns are exact, and accepting `Verification`
+  // and `Result` as aliases was the code inventing a vocabulary the plan does not have.
   const iClass = at(['class']);
-  const iVerified = at(['verified', 'verification']);
-  const iOutcome = at(['outcome', 'result']);
+  const iVerified = at(['verified']);
+  const iOutcome = at(['outcome']);
 
   // A row carries a finding when any cell past the first says something. Keying this off a
   // Summary column index made a three-column table look empty and suppressed every check.

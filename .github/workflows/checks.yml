@@ -89,6 +89,31 @@ jobs:
             console.log("eval suite: " + cases.length + " cases, all references resolve");
           '
 
+      - name: Every eval scaffold is runnable bash
+        run: |
+          node -e '
+            const fs = require("fs"), path = require("path"), cp = require("child_process");
+            const NL = String.fromCharCode(10);
+            let bad = [];
+            for (const c of fs.readdirSync("evals", { withFileTypes: true })) {
+              if (!c.isDirectory()) continue;
+              const y = fs.readFileSync(path.join("evals", c.name, "case.yaml"), "utf8");
+              const lines = y.split(NL);
+              const i = lines.findIndex(l => l.trim() === "scaffold_script: |");
+              if (i === -1) { bad.push(c.name + ": no scaffold_script"); continue; }
+              const body = [];
+              for (const l of lines.slice(i + 1)) {
+                if (l.trim() !== "" && !l.startsWith("  ")) break;
+                body.push(l.startsWith("  ") ? l.slice(2) : l);
+              }
+              if (body.join("").trim() === "") { bad.push(c.name + ": empty scaffold_script"); continue; }
+              const r = cp.spawnSync("bash", ["-n"], { input: body.join(NL) });
+              if (r.status !== 0) bad.push(c.name + ": " + String(r.stderr).trim());
+              else console.log(c.name + ": scaffold parses");
+            }
+            if (bad.length) { for (const b of bad) console.error(b); process.exit(1); }
+          '
+
       - name: route-map runs on this repository
         run: node skills/claude-code-route/scripts/route-map.mjs . --json > /dev/null
 

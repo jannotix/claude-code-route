@@ -4,6 +4,21 @@ runs: 3
 max_turns: 25
 timeout_seconds: 900
 tags: [plan, placement]
+scaffold_script: |
+  mkdir -p src/billing
+  cat > src/billing/subscription.py <<'PY'
+  from dataclasses import dataclass
+  from decimal import Decimal
+
+
+  @dataclass
+  class Subscription:
+      subscriber_id: str
+      monthly_price: Decimal
+
+      def charge(self) -> Decimal:
+          return self.monthly_price
+  PY
 graders:
   - file: graders/placement-table.md
   - file: graders/no-source-before-placement.md

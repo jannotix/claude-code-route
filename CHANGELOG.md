@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- A proof span naming a runner of one or two characters — `go`, `py`, `sh`, `ab` — was refused by a
+  minimum length of three, and `go.mod` was accepted because the runner pattern ended on a word
+  boundary rather than on the program. Both were false answers in the gate the skill exists for.
+- The `$` marker accepted anything that was not a comment, so `` `$ && checked` `` closed a
+  requirement while `` `$ /bin/true` `` did not: a leading slash was read as the start of a comment.
+- The Findings table accepted `Verification` and `Result` as aliases for `Verified` and `Outcome`,
+  which contradicts the exact-column rule the same check is built on.
+- An `Owner` cell separating two names with `/`, `&` or `AND` was read as one owner. The separators
+  are now named in the plan rather than invented in the code, and a dotted symbol stays one name.
+
+### Changed
+
+- Every eval case carries a `scaffold_script` and builds its own repository.
+
+### Added
+
+- Ten probes covering every false negative and false positive the four review rounds produced. The
+  executable predicate is now checked over 46 spans; the suite is 138 checks.
+
 ## [1.0.0] - 2026-08-29
 
 First release.
