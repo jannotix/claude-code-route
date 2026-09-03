@@ -18,8 +18,20 @@ All notable changes to this project are documented here. The format follows
 - An `Owner` cell separating two names with `/`, `&` or `AND` was read as one owner. The separators
   are now named in the plan rather than invented in the code, and a dotted symbol stays one name.
 
+- `route-history append` crashed with exit 1 under lock contention on Windows, losing the entry it
+  was writing. The retry loop treated only `EEXIST` as "somebody holds the lock"; Windows raises
+  `EPERM`, and sometimes `EACCES`, for the same condition. Measured at roughly one writer in 250 with
+  twelve appending at once — 2 failures in 40 rounds before, 0 in 60 after. The contract has always
+  been that a writer which gives up exits 3 and says so; now it does.
+
 ### Changed
 
+- The test suite states where it is standing. `route-lint` reads `route.config.json` from the working
+  directory, which is the point of that file, so the check asserting the built-in default layers now
+  runs from a directory that has no config, and a sibling asserts that a config present in the working
+  directory replaces them. Run from `production/` — the directory the plan records — the suite used to
+  report 140 of 141 while the plan claimed 141. It now reports the same total from the repository root,
+  from `production/` and from `prova/`.
 - Every eval case carries a `scaffold_script` and builds its own repository.
 
 ### Added

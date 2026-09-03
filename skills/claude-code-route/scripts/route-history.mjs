@@ -103,6 +103,13 @@ const prune = (o) => {
 const LOCK_TIMEOUT_MS = 10000;
 const LOCK_STALE_MS = 30000;
 
+// What "somebody else holds it" looks like. POSIX says EEXIST. Windows raises EPERM, and
+// sometimes EACCES, when the directory is being created or removed by another process at
+// that instant — the same condition under a different name. Treating those two as fatal
+// crashed roughly one writer in 250 under contention, losing its append and exiting 1
+// where the contract promises 3.
+const LOCK_HELD = new Set(['EEXIST', 'EPERM', 'EACCES']);
+
 function withLock(target, fn) {
   const lock = `${target}.lock`;
   const deadline = Date.now() + LOCK_TIMEOUT_MS;
@@ -112,7 +119,7 @@ function withLock(target, fn) {
       mkdirSync(lock);
       break;
     } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
+      if (!LOCK_HELD.has(err.code)) throw err;
       // A lock older than the stale window belongs to a process that died holding it.
       try {
         if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) {
