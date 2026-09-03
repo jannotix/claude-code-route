@@ -77,7 +77,9 @@ REQ-010  A span that is not a command must not close a requirement, whatever cha
 REQ-011  A Findings table that cannot show what confirmed a finding must be reported, and a qualified outcome must count as acted on.
   AC-011.1  Given a Findings table with a Not verified column and no Verified column When the plan is checked Then findings-no-verified is reported
   AC-011.2  Given an Outcome cell of `fixed under REQ-004` with an empty Verified cell When the plan is checked Then finding-unverified is reported
-  AC-011.3  Given a three-column Findings table with one row When the plan is checked Then findings-no-outcome is reported
+  AC-011.3  Given a Findings table whose only columns are `#`, `Summary` and `Outcome` When the plan is checked Then findings-no-verified is reported, because the table can record resolution but not what confirmed it
+  AC-011.4  Given a Findings table whose only columns are `#`, `Summary` and `Verified` When the plan is checked Then findings-no-outcome is reported
+            Round 5 found this criterion naming a column count instead of column names, and its cited test asserting the other diagnostic. A shape is not a header list.
 
 REQ-012  An unfilled owner placeholder must not count as an owner, and an Owner cell that separates two names must be reported.
   AC-012.1  Given INV-001 whose Owner is the template placeholder When the plan is checked Then invariant-unowned is reported
@@ -102,10 +104,10 @@ REQ-008  A Findings table that cannot express resolution must be reported once, 
 | REQ | Rule | Home | Layer |
 | --- | --- | --- | --- |
 | REQ-001 | Every requirement and NFR needs a home | `checkPlacement` | application |
-| REQ-002 | Judgement is refused outright | `PROSE_PROOF`, then `looksExecutable` | application |
+| REQ-002 | Judgement is refused outright, and a judgement word inside a backticked span is not judgement | `PROSE_PROOF`, then `looksExecutable` | domain |
 | REQ-003 | Findings columns are located by header, not by position | `checkFindings` | application |
 | REQ-004 | A span is a command or it is not; nothing is inferred from its characters | `commandOf`, then `looksExecutable` | domain |
-| REQ-005 | The `$` marker must be followed by a program | `commandOf` | domain |
+| REQ-005 | The `$` marker must be followed by a program, and a program carries no shell metacharacter | `commandOf` over `PROGRAM_TOKEN`, `COMMENT_TOKEN`, `SHELL_META` | domain |
 | REQ-010 | Only a named runner or a marked span closes a requirement | `looksExecutable` over `RUNNER` | domain |
 | REQ-011 | Findings columns are located exactly; a qualified outcome is acted on | `checkFindings` | application |
 | REQ-012 | A placeholder is not an owner | `checkPlan` | application |
@@ -119,7 +121,7 @@ that are about orchestration, and D2 is squarely the former.
 
 ## Scope
 
-    skills/claude-code-route/scripts/route-lint.mjs, skills/claude-code-route/references/review.md, skills/claude-code-route/SKILL.md, ../tests-debug/**, docs/route/plans/lint-false-negatives/**, docs/route/HISTORY.jsonl, evals/**, route.config.json, CHANGELOG.md, README.md
+    skills/claude-code-route/scripts/route-lint.mjs, skills/claude-code-route/references/review.md, skills/claude-code-route/SKILL.md, ../tests-debug/**, docs/route/plans/lint-false-negatives/**, docs/route/HISTORY.jsonl, evals/**, .github/workflows/**, route.config.json, CHANGELOG.md, README.md
 
 ## Out of scope
 
@@ -216,6 +218,17 @@ against the artifact it was written for.
 
 ## Proof
 
+**Where the proofs live, and what that costs.** Every row below runs
+`node ../tests-debug/route-lint.test.mjs` from `production/`. `tests-debug/` is a sibling of the
+published tree and is deliberately not in this repository: the layout separates what ships from the
+tests and internal notes, and that separation is a project constraint, not an oversight. The
+consequence is real and is stated here rather than glossed: **a reviewer given only the published
+commit cannot run these proofs**, because `git ls-tree -r 9640c5c` contains no `tests-debug` path.
+They are reproducible from the source tree, and revision-bound only there. Round 5 raised this as a
+BLOCKER and it is right that the evidence is not frozen with the candidate; the resolution taken is
+to say so, because publishing the suite would break the constraint the layout exists for.
+
+
 | Requirement | Proof | Result |
 | --- | --- | --- |
 | REQ-001 | `node ../tests-debug/route-lint.test.mjs` — "an NFR with no home is reported"; fails on the pre-fix revision | pass |
@@ -233,9 +246,11 @@ against the artifact it was written for.
 Each of the three was reverted in isolation and the corresponding assertion failed, which is what a
 defect fix owes: a test that fails on the code as it was.
 
-The predicate behind REQ-002 was checked against both sides. Accepted: `pytest tests/x.py::t`,
-`npm test`, `make check`, `scripts/bench.py --rps 50`, `cargo test`. Rejected: `checked`, `done`,
-`verified`, `ok`, `tested`, `passes`.
+The predicate behind REQ-002 is checked from both sides in the suite, over 54 spans. Accepted:
+`pytest tests/x.py::t`, `npm test`, `make check`, `cargo test`, `$ scripts/bench.py --rps 50`.
+Rejected: `checked`, `done`, `verified`, `ok`, `passes`, `go.mod`, `python...`, `$ 2>out`, and
+`scripts/bench.py --rps 50` **without** the marker — an earlier draft of this paragraph listed that
+last one as accepted, which is the opposite of what REQ-004 says and of what the code does.
 
 ## Gaps
 
@@ -287,22 +302,58 @@ true.
 The predicate is now probed over **46 spans**, 21 that must close a requirement and 25 that must not,
 including every false negative and false positive any of the four rounds produced.
 
+## Round 5
+
+Ran 2026-09-03 over the round-4 repairs, `.route/` emptied first. **Ten findings, ten confirmed by
+execution, none refuted.** The prediction the round-4 verdict made — that a fifth round would find
+something — held for the fifth time running.
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 5.1 | DEFECT | BLOCKER | Redirection passed as a program | confirmed: `$ 2>out` closed a requirement | fixed, `SHELL_META` |
+| 5.2 | DEFECT | BLOCKER | A malformed version matched a runner | confirmed: `python...` and `python.` matched | fixed, a version is digits and dots |
+| 5.3 | DEFECT | MAJOR | A judgement word inside a path refused a real proof | confirmed: `pytest tests/reviewed/test.py::t` reported `proof-not-executed` | fixed, backticked spans are excluded before the prose test |
+| 5.4 | DEFECT | MAJOR | A dash counted as an invariant owner | confirmed: `Owner: -` reported nothing | fixed, the owner check uses the shared placeholder list |
+| 5.5 | UNDERSPECIFIED | MAJOR | AC-011.3 named a column count, not column names | confirmed: the criterion and its cited test require different codes | plan amended, AC-011.3 and AC-011.4 name their headers |
+| 5.6 | SCOPE | MAJOR | The eval scaffolds and a CI gate were undeclared | confirmed by `git diff --name-only 47b4d2b..9640c5c` | scope amended |
+| 5.7 | UNPROVEN | BLOCKER | Every proof cites a file outside the frozen commit | confirmed: `git ls-tree -r 9640c5c` has no `tests-debug` path | stated as a limitation, see Proof |
+| 5.8 | UNPROVEN | MAJOR | The narrative listed an accepted span the rule rejects | confirmed: the unmarked `scripts/bench.py --rps 50` is refused | text corrected |
+| 5.9 | MISPLACED | MAJOR | REQ-005 grammar sits beside `commandOf`, not in it | confirmed by reading | placement corrected |
+| 5.10 | MISPLACED | MAJOR | REQ-002 was assigned a layer its own paragraph contradicts | confirmed by reading the table against the note below it | placement corrected |
+
+**Two of these are the proof predicate again, and again they are Execute.** 5.1 and 5.2 have the same
+shape as round 4: leftovers of the deleted inference design — a character class that let a digit open
+a program, and a version written as a loose character class rather than as a version. Neither changes
+what must be true. The predicate is now probed over **54 spans**, and every false answer any of the
+five rounds produced is in that probe.
+
+**5.3 is the first false negative to run the other way.** Every earlier one let something through;
+this one refused a real command, because the prose pattern matched `reviewed` inside a test path. A
+gate that refuses correct work is a gate people switch off, so it is a MAJOR and not a NOISE.
+
+**5.7 is answered rather than fixed.** The proofs live in a sibling directory the layout keeps
+unpublished on purpose. A reviewer holding only the published commit cannot run them. Publishing the
+suite would break the constraint; leaving the claim unqualified would be the kind of unmeasured
+figure this project has a rule against. So the Proof section says it.
+
+149 checks pass.
+
 ## Verdict
 
-Delivered with gaps.
+**Delivered with gaps.**
 
-**Thirty-two findings across four rounds** — four by probing, seven, then eleven, then ten by
-adversarial review — every one confirmed by executing its verification step, none refuted. 138 checks
-pass, and both gates report 0 errors.
+**Forty-two findings across five rounds** — four by probing, then seven, eleven, ten and ten by
+adversarial review — every one confirmed by executing its verification step, none refuted, in any
+round.
 
-The gap is the one this cycle has never closed and cannot close from inside itself: **the round-4
-repairs have not been attacked.** They are covered by probes that fail on the pre-fix code, which is
-what a repair owes, and that is not the same as having been looked for. On a record of four, seven,
-eleven, ten, a fifth round would find something. What would close it: one more adversarial round,
-`.route/` emptied first.
+Two gaps.
 
-`looksExecutable` decides whether a span names a command. It cannot decide whether the command named
-was the right one — that is the reviewer's job, and no linter takes it.
+**The round-5 repairs have not been attacked.** On a record of 4, 7, 11, 10, 10, a sixth round would
+find something. What would close it: one more adversarial round with `.route/` emptied first.
+
+**The evidence is not frozen with the candidate**, for the reason 5.7 gives and the Proof section
+records. That is a property of the repository layout, and a real limit on what a reviewer holding
+only the published commit can check.
 
 ## Amendments
 

@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Four more false answers in the proof gate, found by a fifth adversarial round. `$ 2>out` closed a
+  requirement, because a digit was accepted as the start of a program name and redirection is not a
+  program. `python...` and `python.` matched the `python` runner, whose version pattern was a loose
+  character class rather than the shape a version has. A dash, an em dash or an ellipsis counted as
+  an invariant owner, because the owner check had its own idea of a placeholder instead of the shared
+  one. And, for the first time, a false answer in the other direction: `pytest tests/reviewed/test.py::t`
+  was refused as judgement, because the prose pattern matched `reviewed` inside a path. Backticked
+  spans are now excluded before that test — a gate that refuses correct work is a gate people switch
+  off.
+
 - A proof span naming a runner of one or two characters — `go`, `py`, `sh`, `ab` — was refused by a
   minimum length of three, and `go.mod` was accepted because the runner pattern ended on a word
   boundary rather than on the program. Both were false answers in the gate the skill exists for.
@@ -36,8 +46,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Ten probes covering every false negative and false positive the four review rounds produced. The
-  executable predicate is now checked over 46 spans; the suite is 138 checks.
+- Probes covering every false answer the five review rounds produced, in both directions. The
+  executable predicate is checked over 54 spans; the suite is 149 checks.
 
 ## [1.0.0] - 2026-08-29
 

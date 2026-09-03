@@ -101,7 +101,7 @@ const isPlaceholder = (s) => s === '' || /^<.*>$/.test(s) || s === '—' || s ==
 // knows, or the author marks it `$` and takes responsibility. (REQ-002, REQ-004, REQ-005)
 
 const RUNNER = new RegExp('^(' + [
-  'pytest', 'python[0-9.]*', 'py', 'tox', 'nox', 'hatch', 'uv', 'poetry', 'pip[0-9]*',
+  'pytest', 'python[0-9]*(?:\\.[0-9]+)*', 'py', 'tox', 'nox', 'hatch', 'uv', 'poetry', 'pip[0-9]*',
   'node', 'npm', 'npx', 'pnpm', 'yarn', 'deno', 'bun', 'jest', 'vitest', 'mocha', 'tsc',
   'go', 'cargo', 'rustc', 'clippy', 'gofmt', 'gotest',
   'make', 'just', 'task', 'cmake', 'ctest', 'bazel', 'buck', 'ninja', 'meson',
@@ -118,6 +118,9 @@ const RUNNER = new RegExp('^(' + [
 // operator is punctuation the author left behind, not a command they ran: `$ && checked`
 // marked nothing. (REQ-005)
 const PROGRAM_TOKEN = /^[A-Za-z0-9._~/\\-]/;
+// `$ 2>out` opens on a digit and is redirection, not a program. A program name carries no
+// shell metacharacter anywhere in it. (REQ-005, AC-005.4)
+const SHELL_META = /[<>|&;()$\`]/;
 const COMMENT_TOKEN = /^(#|;|\/\/)/;
 
 // The command a span names, or null if it names none.
@@ -128,6 +131,7 @@ function commandOf(span) {
   const [program, ...args] = body.split(/\s+/);
   // `$ # comment only` marks nothing: the marker must be followed by a program.
   if (!program || COMMENT_TOKEN.test(program) || !PROGRAM_TOKEN.test(program)) return null;
+  if (SHELL_META.test(program)) return null;
   return { explicit, program, args };
 }
 
@@ -195,7 +199,7 @@ function checkPlan(planPath, stage, layers) {
     if (d.kind === 'INV') {
       const owner = (d.text.match(/\bOwner:\s*(.*)$/) ?? [])[1]?.trim() ?? '';
       const named = owner.replace(/`/g, '').trim();
-      if (!named || /^<.*>$/.test(named) || named === '?') {
+      if (!named || isPlaceholder(named) || named === '?') {
         report('error', planPath, d.line, 'invariant-unowned',
           `${d.id} names no owner; an invariant with none is enforced by convention, which is to say sometimes`);
       } else if (/[,/&]|\s+and\s+/i.test(named)) {
@@ -366,7 +370,11 @@ function checkProof(planPath, text, reqs) {
       }
       continue;
     }
-    if (PROSE_PROOF.test(proof)) {
+    // Judgement is what the author wrote, not what the command they ran is called:
+    // `pytest tests/reviewed/test.py::t` is a path, and matching `reviewed` inside it
+    // refused a real proof. Backticked spans are excluded before the test. (REQ-002)
+    const prose = proof.replace(/`[^`]*`/g, ' ');
+    if (PROSE_PROOF.test(prose)) {
       report('error', planPath, row.line, 'proof-not-executed',
         `${id} closes on judgement, not execution: "${proof.slice(0, 60)}"`);
       continue;
