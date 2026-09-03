@@ -66,7 +66,7 @@ jobs:
             let bad = [];
             if (manifest.experimental?.evals !== dir) bad.push("manifest does not declare " + dir);
             const cases = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory());
-            if (cases.length < 4) bad.push("fewer than four cases");
+            if (cases.length < 3) bad.push("fewer than three cases");
             for (const c of cases) {
               const d = path.join(dir, c.name);
               const y = path.join(d, "case.yaml");
@@ -113,6 +113,12 @@ jobs:
             }
             if (bad.length) { for (const b of bad) console.error(b); process.exit(1); }
           '
+
+      - name: The test suite passes, from three working directories
+        run: |
+          for d in . skills evals; do
+            (cd "$d" && node "$GITHUB_WORKSPACE/tests/route-lint.test.mjs" | tail -1)
+          done
 
       - name: route-map runs on this repository
         run: node skills/claude-code-route/scripts/route-map.mjs . --json > /dev/null

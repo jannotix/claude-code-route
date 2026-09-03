@@ -22,6 +22,12 @@ const STAGES = ['plan', 'execute', 'review'];
 // A proof cell that reads like judgement rather than execution. Nothing closes on a read.
 const PROSE_PROOF = /\b(by inspection|inspected|reviewed|code review|looks? (correct|right|fine)|should work|seems? (correct|fine)|obvious|trivial|self[- ]evident|verified visually|no test needed|n\/a)\b/i;
 
+// Judgement is what the author wrote, not what the command they ran is called:
+// `pytest tests/reviewed/test.py::t` is a path, and matching `reviewed` inside it refused a
+// real proof. The spans come out before the prose test, and that decision belongs beside the
+// pattern rather than in the caller. (REQ-002)
+const proseOf = (proof) => proof.replace(/`[^`]*`/g, ' ');
+
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'vendor', 'target',
   '.next', '.venv', 'venv', '__pycache__', 'coverage',
@@ -101,7 +107,7 @@ const isPlaceholder = (s) => s === '' || /^<.*>$/.test(s) || s === '—' || s ==
 // knows, or the author marks it `$` and takes responsibility. (REQ-002, REQ-004, REQ-005)
 
 const RUNNER = new RegExp('^(' + [
-  'pytest', 'python[0-9]*(?:\\.[0-9]+)*', 'py', 'tox', 'nox', 'hatch', 'uv', 'poetry', 'pip[0-9]*',
+  'pytest', 'python(?:[0-9]+(?:\\.[0-9]+)*)?', 'py', 'tox', 'nox', 'hatch', 'uv', 'poetry', 'pip[0-9]*',
   'node', 'npm', 'npx', 'pnpm', 'yarn', 'deno', 'bun', 'jest', 'vitest', 'mocha', 'tsc',
   'go', 'cargo', 'rustc', 'clippy', 'gofmt', 'gotest',
   'make', 'just', 'task', 'cmake', 'ctest', 'bazel', 'buck', 'ninja', 'meson',
@@ -118,9 +124,12 @@ const RUNNER = new RegExp('^(' + [
 // operator is punctuation the author left behind, not a command they ran: `$ && checked`
 // marked nothing. (REQ-005)
 const PROGRAM_TOKEN = /^[A-Za-z0-9._~/\\-]/;
-// `$ 2>out` opens on a digit and is redirection, not a program. A program name carries no
-// shell metacharacter anywhere in it. (REQ-005, AC-005.4)
-const SHELL_META = /[<>|&;()$\`]/;
+// A program name carries no shell metacharacter anywhere in it: redirection, pipes and
+// separators, command and process substitution, and the glob characters. `$ 2>out` opens on
+// a digit and is redirection; `$ foo*` is a pattern the shell expands, not a program the
+// author ran. The set is named in AC-005.6 rather than chosen here. (REQ-005)
+const SHELL_META_CHARS = new Set(['<', '>', '|', '&', ';', '(', ')', '$', "`", '*', '?', '{', '}', '[', ']']);
+const hasShellMeta = (token) => [...token].some((c) => SHELL_META_CHARS.has(c));
 const COMMENT_TOKEN = /^(#|;|\/\/)/;
 
 // The command a span names, or null if it names none.
@@ -131,7 +140,7 @@ function commandOf(span) {
   const [program, ...args] = body.split(/\s+/);
   // `$ # comment only` marks nothing: the marker must be followed by a program.
   if (!program || COMMENT_TOKEN.test(program) || !PROGRAM_TOKEN.test(program)) return null;
-  if (SHELL_META.test(program)) return null;
+  if (hasShellMeta(program)) return null;
   return { explicit, program, args };
 }
 
@@ -370,11 +379,7 @@ function checkProof(planPath, text, reqs) {
       }
       continue;
     }
-    // Judgement is what the author wrote, not what the command they ran is called:
-    // `pytest tests/reviewed/test.py::t` is a path, and matching `reviewed` inside it
-    // refused a real proof. Backticked spans are excluded before the test. (REQ-002)
-    const prose = proof.replace(/`[^`]*`/g, ' ');
-    if (PROSE_PROOF.test(prose)) {
+    if (PROSE_PROOF.test(proseOf(proof))) {
       report('error', planPath, row.line, 'proof-not-executed',
         `${id} closes on judgement, not execution: "${proof.slice(0, 60)}"`);
       continue;

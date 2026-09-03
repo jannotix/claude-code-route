@@ -14,6 +14,11 @@ mkdir -p .route && git add -A && git diff --cached > .route/candidate.patch
 wc -l .route/candidate.patch
 ```
 
+**Cut the patch to the change, not to the range between two pushes.** `git diff <last release>..HEAD`
+sweeps up every change made in between, including ones the plan puts out of scope, and the reviewer
+judges the bundle. On this project that produced a confirmed `SCOPE` finding against a repair that was
+correctly recorded as its own separate change. Diff the commits that belong to this plan.
+
 **Stage before diffing.** `git diff` omits untracked files, which is every file of a new capability.
 The patch comes out empty, the reviewer finds nothing in it, and the PASS it returns is about
 nothing. Read the line count before sending: an empty patch is a broken freeze, not a small change.

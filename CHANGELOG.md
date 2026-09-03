@@ -36,6 +36,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The eval suite is three cases. `comment-voice` was retired after three prompt and grader designs
+  failed to separate the arms; the property it measured is real but is not separable by a binary
+  rubric on one file. Its prompt, graders and both observed outputs are kept internally as a
+  reproduction, and the gap is named in `evals/README.md`.
+
+- The test suite ships with the product. `tests/route-lint.test.mjs` and its fixtures are in the
+  repository, so the proofs a plan cites are frozen with the commit that they prove and a reader
+  holding only that commit can run them. CI runs the suite on every push, from three working
+  directories. What stays unpublished is working notes, which are the only genuinely internal part.
+
 - The test suite states where it is standing. `route-lint` reads `route.config.json` from the working
   directory, which is the point of that file, so the check asserting the built-in default layers now
   runs from a directory that has no config, and a sibling asserts that a config present in the working

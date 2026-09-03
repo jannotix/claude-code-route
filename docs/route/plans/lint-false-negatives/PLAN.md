@@ -66,6 +66,8 @@ REQ-005  An author must be able to declare a span an executed command, and the m
   AC-005.3  Given a proof cell of `$ # comment only` When the plan is checked Then proof-not-executed is reported, because a marker followed by a comment marks nothing
   AC-005.4  Given a proof cell of `$ && checked` When the plan is checked Then proof-not-executed is reported, because a shell operator is not a program
   AC-005.5  Given a proof cell of `$ /bin/true` When the plan is checked Then nothing is reported, because an absolute path is a program and not a comment
+  AC-005.6  Given a proof cell whose program contains any of `< > | & ; ( ) $ ` * ? [ ] { }` When the plan is checked Then proof-not-executed is reported. Redirection, pipes, separators, substitution and globs: the set is named here so the code does not choose it, and `$ foo*` is a pattern the shell expands rather than a program the author ran
+  AC-005.7  Given a proof cell of `python.1` or `python.` When the plan is checked Then proof-not-executed is reported, because a version is one or more digits and the pattern made them optional
 
 REQ-010  A span that is not a command must not close a requirement, whatever characters it contains. A span names a runner only when the whole program is that runner, and a runner of any length counts.
   AC-010.1  Given a proof cell of `README.md` When the plan is checked Then proof-not-executed is reported
@@ -104,7 +106,7 @@ REQ-008  A Findings table that cannot express resolution must be reported once, 
 | REQ | Rule | Home | Layer |
 | --- | --- | --- | --- |
 | REQ-001 | Every requirement and NFR needs a home | `checkPlacement` | application |
-| REQ-002 | Judgement is refused outright, and a judgement word inside a backticked span is not judgement | `PROSE_PROOF`, then `looksExecutable` | domain |
+| REQ-002 | Judgement is refused outright, and a judgement word inside a backticked span is not judgement | `PROSE_PROOF` with `proseOf`, then `looksExecutable` | domain |
 | REQ-003 | Findings columns are located by header, not by position | `checkFindings` | application |
 | REQ-004 | A span is a command or it is not; nothing is inferred from its characters | `commandOf`, then `looksExecutable` | domain |
 | REQ-005 | The `$` marker must be followed by a program, and a program carries no shell metacharacter | `commandOf` over `PROGRAM_TOKEN`, `COMMENT_TOKEN`, `SHELL_META` | domain |
@@ -121,7 +123,7 @@ that are about orchestration, and D2 is squarely the former.
 
 ## Scope
 
-    skills/claude-code-route/scripts/route-lint.mjs, skills/claude-code-route/references/review.md, skills/claude-code-route/SKILL.md, ../tests-debug/**, docs/route/plans/lint-false-negatives/**, docs/route/HISTORY.jsonl, evals/**, .github/workflows/**, route.config.json, CHANGELOG.md, README.md
+    skills/claude-code-route/scripts/route-lint.mjs, skills/claude-code-route/references/review.md, skills/claude-code-route/SKILL.md, tests/**, docs/route/plans/lint-false-negatives/**, docs/route/HISTORY.jsonl, evals/**, .github/workflows/**, route.config.json, CHANGELOG.md, README.md
 
 ## Out of scope
 
@@ -146,8 +148,8 @@ finding was closed without a verification step.
 | --- | --- |
 | `skills/claude-code-route/scripts/route-lint.mjs` | REQ-001 to REQ-012 |
 | `skills/claude-code-route/references/review.md` | what the linter accepts as a proof |
-| `../tests-debug/fixtures/false-negatives/PLAN.md` | the reproduction, kept as a fixture |
-| `../tests-debug/route-lint.test.mjs` | six assertions |
+| `tests/fixtures/false-negatives/PLAN.md` | the reproduction, kept as a fixture |
+| `tests/route-lint.test.mjs` | six assertions |
 | `route.config.json` | this project's two layer names |
 
 ## Deviations
@@ -218,30 +220,40 @@ against the artifact it was written for.
 
 ## Proof
 
-**Where the proofs live, and what that costs.** Every row below runs
-`node ../tests-debug/route-lint.test.mjs` from `production/`. `tests-debug/` is a sibling of the
-published tree and is deliberately not in this repository: the layout separates what ships from the
-tests and internal notes, and that separation is a project constraint, not an oversight. The
-consequence is real and is stated here rather than glossed: **a reviewer given only the published
-commit cannot run these proofs**, because `git ls-tree -r 9640c5c` contains no `tests-debug` path.
-They are reproducible from the source tree, and revision-bound only there. Round 5 raised this as a
-BLOCKER and it is right that the evidence is not frozen with the candidate; the resolution taken is
-to say so, because publishing the suite would break the constraint the layout exists for.
+**Where the proofs live, and how a row is read.** Every row below runs
+`node tests/route-lint.test.mjs` from the repository root. `tests/` is in the repository, so a reviewer
+holding only the published commit can run them and they are frozen with the candidate they prove. A
+row's `pass` means that command exited 0 at the revision the row was written against, and CI runs the
+same command on every push from three working directories — so a stale row fails the build rather
+than sitting in the plan claiming a result nobody re-checked.
+
+Round 5 reported this as a BLOCKER when the suite lived in an unpublished sibling directory, and the
+answer taken then was to state the limit rather than fix it, on the reading that the layout forbade
+publishing tests. That reading was wrong, and the correction is recorded here rather than quietly
+made. The layout exists so that publishing is a copy of one directory with no filtering step that can
+be forgotten — the risk it guards against is *internal material* reaching the public tree, which is
+why the analysis of every third-party product studied stays out. A test suite that proves the shipped
+scripts is not internal material; it is part of the product, and `git ls-files` over it is clean of
+every name the constraint exists to keep out. What remains unpublished is `tests-debug/NOTES.md`,
+which is working notes and genuinely internal.
+
+The constraint is therefore unchanged and better served: the published tree now carries its own
+proof, and CI runs it on every push.
 
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | `node ../tests-debug/route-lint.test.mjs` — "an NFR with no home is reported"; fails on the pre-fix revision | pass |
-| REQ-002 | `node ../tests-debug/route-lint.test.mjs` — "a proof of `checked` is rejected", plus the two acceptance cases; fails on the pre-fix revision | pass |
-| REQ-003 | `node ../tests-debug/route-lint.test.mjs` — "a findings table with no Verified column is reported"; fails on a faithful D3-only revert | pass |
-| REQ-004 | `node ../tests-debug/route-lint.test.mjs` — the accept and reject probe over 30 spans, including `e.g. checked`; fails on the whitespace-alone predicate | pass |
-| REQ-005 | `node ../tests-debug/route-lint.test.mjs` — "the $ prefix accepts an unknown runner", "the marker needs a program, not an operator", "an absolute path is a program, not a comment" | pass |
-| REQ-006 | `node ../tests-debug/route-lint.test.mjs` — "an invariant with no owner is reported" and its negative | pass |
-| REQ-007 | `node ../tests-debug/route-lint.test.mjs` — "a lookalike header does not answer for Verified" | pass |
-| REQ-008 | `node ../tests-debug/route-lint.test.mjs` — "a table with no Outcome column is reported once, as its own defect" | pass |
-| REQ-010 | `node ../tests-debug/route-lint.test.mjs` — "a filename that starts with a runner is not one", "a two-letter runner is a runner", "a program that merely starts with a runner is not one", and the 46-span probe | pass |
-| REQ-011 | `node ../tests-debug/route-lint.test.mjs` — "an outcome qualified by a requirement still counts as acted on", "a three-column table is not read as empty", "Result does not answer for Outcome" | pass |
-| REQ-012 | `node ../tests-debug/route-lint.test.mjs` — "a template placeholder is not an owner", "two owners are reported" | pass |
+| REQ-001 | `node tests/route-lint.test.mjs` — "an NFR with no home is reported"; fails on the pre-fix revision | pass |
+| REQ-002 | `node tests/route-lint.test.mjs` — "a proof of `checked` is rejected", plus the two acceptance cases; fails on the pre-fix revision | pass |
+| REQ-003 | `node tests/route-lint.test.mjs` — "a findings table with no Verified column is reported"; fails on a faithful D3-only revert | pass |
+| REQ-004 | `node tests/route-lint.test.mjs` — the accept and reject probe over 30 spans, including `e.g. checked`; fails on the whitespace-alone predicate | pass |
+| REQ-005 | `node tests/route-lint.test.mjs` — "the $ prefix accepts an unknown runner", "the marker needs a program, not an operator", "an absolute path is a program, not a comment" | pass |
+| REQ-006 | `node tests/route-lint.test.mjs` — "an invariant with no owner is reported" and its negative | pass |
+| REQ-007 | `node tests/route-lint.test.mjs` — "a lookalike header does not answer for Verified" | pass |
+| REQ-008 | `node tests/route-lint.test.mjs` — "a table with no Outcome column is reported once, as its own defect" | pass |
+| REQ-010 | `node tests/route-lint.test.mjs` — "a filename that starts with a runner is not one", "a two-letter runner is a runner", "a program that merely starts with a runner is not one", and the 46-span probe | pass |
+| REQ-011 | `node tests/route-lint.test.mjs` — "an outcome qualified by a requirement still counts as acted on", "a three-column table is not read as empty", "Result does not answer for Outcome" | pass |
+| REQ-012 | `node tests/route-lint.test.mjs` — "a template placeholder is not an owner", "two owners are reported" | pass |
 
 Each of the three was reverted in isolation and the corresponding assertion failed, which is what a
 defect fix owes: a test that fails on the code as it was.
@@ -338,22 +350,64 @@ figure this project has a rule against. So the Proof section says it.
 
 149 checks pass.
 
+## Round 6
+
+Ran 2026-09-03 over the round-5 repairs, `.route/` emptied first. **Eight findings, eight confirmed
+by executing their verification steps, none refuted.** The sixth round in a row to find something.
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 6.1 | DEFECT | BLOCKER | The version pattern made its digits optional | confirmed: `python.1` matched the `python` runner and closed a requirement | fixed, a version is one or more digits |
+| 6.2 | SCOPE | MAJOR | The candidate carried a `route-history` repair the plan excludes | confirmed by `git diff --name-only 9640c5c..4f4499b -- .../route-history.mjs` | freeze corrected, see below |
+| 6.3 | UNDERSPECIFIED | MAJOR | "Shell metacharacter" had no defined set | confirmed: `$ foo*`, `$ fo?o` and `$ foo[bar]` all closed a requirement | AC-005.6 names the set; the code no longer chooses it |
+| 6.4 | UNPROVEN | BLOCKER | `149/149` was a bare quote, bound to no command and no revision | confirmed by reading the evidence block | fixed, and the suite is now in the repository |
+| 6.5 | UNPROVEN | MAJOR | AC-008.1 says "exactly once" and the test asserted "at least once" | confirmed by reading `includes` against the criterion | fixed, the diagnostic is counted |
+| 6.6 | UNPROVEN | MAJOR | AC-007.2's passing case was never tested | confirmed: every lookalike-header fixture had an empty `Verified` cell | fixed |
+| 6.7 | UNPROVEN | MAJOR | AC-011.4's exact three-column table was never tested | confirmed: no fixture used `#`, `Summary`, `Verified` | fixed |
+| 6.8 | MISPLACED | MAJOR | REQ-002's span exemption lived in `checkProof` | confirmed by reading the placement row against the code | fixed by moving `proseOf` beside the pattern it guards |
+
+**6.1 and 6.3 are the proof predicate for the sixth round running, and both were mine to make.** The
+version pattern `python[0-9]*(?:\.[0-9]+)*` has an optional first group, so `python` + nothing + `.1`
+matched. The metacharacter class was invented at the keyboard in round 5 — the plan never said what a
+metacharacter is — and it omitted every glob. Worse, the class as written was malformed: an
+unescaped `]` closed it early, so it had not been testing what it appeared to test. It is a character
+set now, with nothing to escape.
+
+**6.8 is worth the space it takes.** The first fix was to add a second placement row, one per home.
+`route-lint` rejected the plan for it: a requirement appears in the table exactly once, which is its
+own rule and the right one. Two homes for one rule is the thing the placement gate exists to prevent.
+So the code moved instead — `proseOf` now sits beside `PROSE_PROOF`, in the layer the row names — and
+the row stayed a single line. The gate caught its author.
+
+**6.2 is a freeze defect, not a code defect.** The `route-history` lock repair is a separate Light
+change with its own history entry (`history-lock-eperm`) and its own changelog line; the plan puts
+`route-history` out of scope and that is still right. What went wrong is that the candidate patch was
+cut as `9640c5c..4f4499b`, a range spanning two changes, so the reviewer was handed both and judged
+the bundle. The lesson is about freezing, and it is now in the review reference: cut the patch to the
+change, not to the range between two pushes.
+
+The predicate is probed over **59 spans**, in both directions. 145 checks pass, from the repository
+root, from `skills/` and from `evals/`.
+
 ## Verdict
 
 **Delivered with gaps.**
 
-**Forty-two findings across five rounds** — four by probing, then seven, eleven, ten and ten by
-adversarial review — every one confirmed by executing its verification step, none refuted, in any
-round.
+**Fifty findings across six rounds** — four found by probing, then 7, 11, 10, 10, 8 by adversarial review. Every
+one confirmed by executing its verification step, none refuted, in any round. The tabled findings
+number 46; four more were found by probing before the first review, and the total is the sum.
+That arithmetic is written out because the companion plan was caught this same day claiming a figure
+nobody had counted.
 
 Two gaps.
 
-**The round-5 repairs have not been attacked.** On a record of 4, 7, 11, 10, 10, a sixth round would
-find something. What would close it: one more adversarial round with `.route/` emptied first.
+**The round-6 repairs have not been attacked.** On a record of 4, 7, 11, 10, 10, 8, a seventh round
+would find something. What would close it: one more adversarial round, `.route/` emptied first, and
+the patch cut to this change rather than to a range.
 
-**The evidence is not frozen with the candidate**, for the reason 5.7 gives and the Proof section
-records. That is a property of the repository layout, and a real limit on what a reviewer holding
-only the published commit can check.
+**The comment-voice heuristics remain heuristics**, and they are out of scope here by declaration.
+Measuring the retired eval case showed none of them firing on either arm's narration, so the gap is
+now named with a reproduction rather than merely declared.
 
 ## Amendments
 

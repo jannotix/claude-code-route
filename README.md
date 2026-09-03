@@ -270,7 +270,7 @@ called progress, and an unproven requirement is not called implemented.
 
 ## Evals
 
-`evals/` holds four cases, each measuring one property the skill claims, scored against a no-plugin
+`evals/` holds three cases, each measuring one property the skill claims, scored against a no-plugin
 baseline arm:
 
 | Case | Property under test |
@@ -278,7 +278,10 @@ baseline arm:
 | `plan-gate` | A rule gets a named home before code is written |
 | `proof-gate` | Nothing closes on a read |
 | `depth-scales` | Rigour is proportional to blast radius |
-| `comment-voice` | Comments carry what the code cannot |
+
+A fourth, `comment-voice`, was retired after three designs failed to separate the arms. The property
+is real; it is not separable by a binary rubric on one file, and rewriting the case until it flattered
+would have been fitting the measurement to the answer.
 
 ```bash
 claude plugin eval claude-code-route
@@ -288,12 +291,23 @@ claude plugin eval claude-code-route
 that reason: a discipline that cannot be cheap on a typo gets turned off, and is then absent for the
 migration too.
 
-The runner is still in early access on this account, so the suite has never run under it. One case
-was measured by hand instead: `proof-gate` scored **0 on both graders with the skill absent and 1 on
-both with it invoked**. The same runs surfaced something the score does not say — in headless mode
-the skill did not auto-invoke and had to be named, before or after its description was rewritten to
-trigger better. `evals/README.md` carries the transcripts and what
-would close the rest.
+The runner is still in early access on this account, so the suite has never run under it. All four
+cases were measured by hand instead, both arms each, in isolated sessions. `evals/README.md` carries
+the numbers, the transcripts, and the two things the scores do not say: which cases fire the skill on
+their own, and which case does not discriminate.
+
+## Tests
+
+`tests/route-lint.test.mjs` is the proof for the three scripts. It has no dependencies and no
+framework:
+
+```bash
+node tests/route-lint.test.mjs
+```
+
+Exit 0 when every check passes. CI runs it from three working directories, because `route-lint` reads
+`route.config.json` from the directory it is standing in — a check that ignored that reported a
+different total depending on where it ran.
 
 ## Scope
 
