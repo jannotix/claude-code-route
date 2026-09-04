@@ -166,8 +166,8 @@ execution round, 2026-09-04.
 | T3 — declare or remove `docs/route/` | REQ-007 | **done** — declared as a worked example |
 | T4 — declare and enforce the Node floor | REQ-004 | **done** — Node 18, README and manifest, exit 2 below it |
 | T5 — CI fails on a non-empty `[Unreleased]` | REQ-003 | **done** — gate run both ways |
-| T6 — CI matrix over three platforms and two Node versions | REQ-005 | written, unproven until CI runs |
-| T7 — CI installs the plugin and runs its suite | REQ-006, NFR-002 | written, unproven until CI runs |
+| T6 — CI matrix over three platforms and two Node versions | REQ-005 | **done** — 6 of 6 green, run `33858165452` |
+| T7 — CI installs the plugin and runs its suite | REQ-006, NFR-002 | **done** — install job green in 27s |
 | T8 — adjudicate the 14 gate warnings in writing | NFR-001 | **done** — see Adjudicated warnings |
 | T9 — close `[Unreleased]` as 1.1.0, bump the manifest | REQ-003, REQ-001 | **done** — manifest at 1.1.0 |
 | T10 — tag and release, notes describing this code | REQ-001 | T9 |
@@ -222,19 +222,29 @@ reproducible by anyone holding the commit.
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | `$ git rev-list --count claude-code-route--v1.1.0..main` returning 0, recorded at release | open |
-| REQ-002 | `node tests/route-lint.test.mjs` — the suppressed-identity append and its chain verification | open |
-| REQ-003 | `node tests/route-lint.test.mjs` — the changelog gate on a non-empty and an empty `[Unreleased]` | open |
-| REQ-004 | `node tests/route-lint.test.mjs` — the floor check refusing an older runtime with a named message | open |
-| REQ-005 | `$ gh run view --job <windows job>` on a branch reintroducing the `EPERM` defect | open |
-| REQ-006 | `$ gh run view --job <install job>` showing marketplace add, install, and the installed suite | open |
-| REQ-007 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 skills/` | open |
-| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 skills/ --json` reporting 0 warnings | open |
-| NFR-002 | `$ gh run list --limit 1` showing the install job under five minutes | open |
+| REQ-001 | `$ git rev-list --count claude-code-route--v1.1.0..main` returning 0 at the tag | pass |
+| REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
+| REQ-003 | `$ node cg_probe.js` — the extracted gate, exit 1 on the 40-line `[Unreleased]` naming its first entry, exit 0 once the version was cut | pass |
+| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; and the README states the same floor | pass |
+| REQ-005 | `$ gh run view 33858165452` — six matrix jobs green across Linux, macOS and Windows at Node 18 and 22 | pass |
+| REQ-006 | `$ gh run view 33858165452` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
+| REQ-007 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 --stage plan --layers domain,application,release` | pass |
+| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 skills/ --layers domain,application,release --json` — 0 errors, and the Adjudicated warnings section rules on all 14 it reports | pass |
+| NFR-002 | `$ gh run view 33858165452` — install job start to finish, 27 seconds against a budget of 300 | pass |
 
-Nothing above is closed. This plan is at its Plan gate and no execution has begun; the table records
-what each requirement will owe, so that a later reader can tell a proof that ran from one that was
-promised.
+**What the matrix found on its first run, which is why REQ-005 exists.** Six jobs, and two failed:
+macOS at both Node versions, on the step that proves the history detects an edited entry. `sed -i`
+takes a backup suffix on BSD and refuses one on GNU, so the step edited nothing on macOS and then
+reported that `verify` had failed to notice. The install job failed too, at its last step: the search
+for the installed suite assumed a depth of two where the file sits at four, and used a `-printf` that
+only GNU `find` has. Both defects were in steps written the same hour, and both were invisible on the
+single platform CI had been running.
+
+**And a defect of mine that the matrix caught twice.** The first repair of `sed -i` never reached
+disk: the script that edited the workflow made the change, then hit an assertion on a later edit and
+exited before writing. The commit message described the fix; the file did not contain it. macOS
+failed again with the identical BSD error, which is the only reason it was noticed. An edit script
+that writes at the end discards every earlier change when a later assertion fires.
 
 ## Gaps
 
@@ -255,8 +265,19 @@ attacked.** They are not part of this plan and do not block a release, but a rel
 
 ## Verdict
 
-**Plan gate open, execution not started.**
+**Delivered with gaps.**
 
-Seven findings, all confirmed by execution, none refuted. Three are blockers and none of them is in
-the skill's own logic: the product works, and what is not ready is the way it is labelled, proven
-and shipped. That distinction is the reason this plan exists rather than a patch.
+Seven findings from the adversarial pass, all confirmed by execution and all closed. Every
+requirement and both non-functional requirements are proven by something that ran, and the two
+figures quoted — six matrix jobs and 27 seconds — are readable from run `33858165452` rather than
+asserted here.
+
+Three of the closures are worth separating from the rest, because they were proven by failure before
+they were proven by success. REQ-005 is met by a matrix whose first run went red on macOS twice and
+took the install job with it; REQ-006 is met by a job that failed at its last step before it passed;
+and REQ-003's gate was watched refusing a real forty-line `[Unreleased]` before it was watched
+accepting an empty one. A gate that has only ever been seen agreeing has not been seen working.
+
+The gaps are the standing ones, and neither blocks the release: the round-6 repairs to the linter and
+the round-8 repairs to the capability fixture have not been attacked, and `comment-commented-code`
+refuses prose beginning with a keyword. Both are recorded with reproductions.
