@@ -224,15 +224,15 @@ reproducible by anyone holding the commit.
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | `$ git rev-list --count claude-code-route--v1.1.0..main` returning 0 at the tag | pass |
+| REQ-001 | `$ gh run view 33930561278` — the install job hashed 51 installed files against the default branch and none differed or was absent; and `$ git rev-list --count claude-code-route--v1.1.2..main` returns 0 at the tag | pass |
 | REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
 | REQ-003 | `node tests/route-lint.test.mjs` — six checks import `.github/changelog-gate.mjs`, the file the workflow calls, and run it both ways: exit 1 naming the first unreleased line, exit 0 once that entry sits under a version heading. Gutting the gate to return nothing fails two of them | pass |
 | REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the three declarations, the README and `engines.node` are asserted equal, and setting `engines.node` to `>=20.0.0` fails that check | pass |
-| REQ-005 | `$ gh run view 33858165452` — six matrix jobs green across Linux, macOS and Windows at Node 18 and 22 | pass |
-| REQ-006 | `$ gh run view 33858165452` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
+| REQ-005 | `$ gh run view 33930561278` — nine matrix jobs green across Linux, macOS and Windows at Node 18, 22 and 24 | pass |
+| REQ-006 | `$ gh run view 33930561278` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
 | REQ-007 | `node tests/route-lint.test.mjs` — six checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
 | NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — over the whole published tree, which is what the marketplace ships: 0 errors, and the Adjudicated warnings section rules on all 14 it reports | pass |
-| NFR-002 | `$ gh run view 33858165452` — install job start to finish, 27 seconds against a budget of 300 | pass |
+| NFR-002 | `$ gh run view 33930561278` — install job start to finish, 26 seconds against a budget of 300 | pass |
 
 **What the matrix found on its first run, which is why REQ-005 exists.** Six jobs, and two failed:
 macOS at both Node versions, on the step that proves the history detects an edited entry. `sed -i`
