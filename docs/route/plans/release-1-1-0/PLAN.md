@@ -22,6 +22,7 @@ who are not in this conversation. A wrong one cannot be taken back — it can on
 REQ-001  A version string must identify exactly one artifact.
   AC-001.1  Given the version in `.claude-plugin/plugin.json` When a user installs from the marketplace and a reader checks out the matching tag Then the two trees are identical
   AC-001.2  Given a release tag When `git rev-list --count <tag>..main` is run Then it prints 0, or the difference is itself a released version
+  AC-001.4  Given the interval between bumping the manifest and cutting the tag When a commit in it is installed Then it reports a version whose tag does not yet exist. The window is real and this release spent four commits inside it; the criterion is that the window is closed before the release is announced, not that it never opens
   AC-001.3  Given a bug report naming a version When the maintainer checks out that tag Then the behaviour the reporter saw is reproducible from it
 
 REQ-002  The published tree must not carry an operator's identity unless publishing it is a recorded decision.
@@ -36,7 +37,7 @@ REQ-003  A release must leave no user-visible change unversioned.
 
 REQ-004  The runtime the scripts require must be declared and must fail clearly below it.
   AC-004.1  Given the README and the plugin manifest When a reader looks for the required Node version Then both state the same floor
-  AC-004.2  Given a Node older than the floor When any of the three scripts is run Then it exits non-zero with a message naming the required version, not a syntax error
+  AC-004.2  Given a Node between 14 and the floor When any of the three scripts is run Then it exits 2 with a message naming the required version. Below Node 14 the module is parsed before any of it executes and the optional-chaining in it is a syntax error, so no guard inside the file can run; that is a limit of a single-file guard and not something this criterion claims to cover
   AC-004.3  Given a Node at the floor exactly When the test suite is run Then it passes
 
 REQ-005  Continuous integration must exercise every operating system the plugin is documented to support.
@@ -73,7 +74,7 @@ NFR-002  Install cost: a first install and its verification complete in under 5 
 | REQ-001 | A version names one tree; the tag and the installed artifact agree | `.claude-plugin/plugin.json` with the release tag | release |
 | REQ-002 | Identity is recorded only when recording it was decided | `route-history.mjs` for the switch, `docs/route/README.md` for the decision | release |
 | REQ-003 | Nothing user-visible ships without a version heading | `.github/workflows/checks.yml` | release |
-| REQ-004 | The runtime floor is declared once and enforced at entry | `skills/claude-code-route/scripts/` shared preamble | release |
+| REQ-004 | The runtime floor is declared at each script's entry, and the three declarations are asserted equal | each script's preamble, checked by `tests/route-lint.test.mjs` | release |
 | REQ-005 | The matrix covers the platforms the README claims | `.github/workflows/checks.yml` | release |
 | REQ-006 | A release is proven by installing it | `.github/workflows/checks.yml` | release |
 | REQ-007 | Every published directory declares its purpose | `docs/route/README.md` and the release check | release |
@@ -170,8 +171,8 @@ execution round, 2026-09-04.
 | T7 — CI installs the plugin and runs its suite | REQ-006, NFR-002 | **done** — install job green in 27s |
 | T8 — adjudicate the 14 gate warnings in writing | NFR-001 | **done** — see Adjudicated warnings |
 | T9 — close `[Unreleased]` as 1.1.0, bump the manifest | REQ-003, REQ-001 | **done** — manifest at 1.1.0 |
-| T10 — tag and release, notes describing this code | REQ-001 | T9 |
-| T11 — adversarial round over this release | — | T10 |
+| T11 — adversarial round over the candidate | — | T1..T9, **before T10** |
+| T10 — tag and release, notes describing this code | REQ-001 | T11 |
 
 ## Deviations
 
@@ -224,7 +225,7 @@ reproducible by anyone holding the commit.
 | --- | --- | --- |
 | REQ-001 | `$ git rev-list --count claude-code-route--v1.1.0..main` returning 0 at the tag | pass |
 | REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
-| REQ-003 | `$ node cg_probe.js` — the extracted gate, exit 1 on the 40-line `[Unreleased]` naming its first entry, exit 0 once the version was cut | pass |
+| REQ-003 | `node tests/route-lint.test.mjs` — the changelog gate extracted from the workflow and run both ways: exit 1 on a non-empty `[Unreleased]` naming its first entry, exit 0 on an empty one | pass |
 | REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; and the README states the same floor | pass |
 | REQ-005 | `$ gh run view 33858165452` — six matrix jobs green across Linux, macOS and Windows at Node 18 and 22 | pass |
 | REQ-006 | `$ gh run view 33858165452` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
@@ -263,21 +264,86 @@ comment-voice heuristics advisory; recorded so the next round has its case ready
 **The round-6 repairs to the linter and the round-8 repairs to the capability fixture have not been
 attacked.** They are not part of this plan and do not block a release, but a release ships them.
 
+## Round 7 — the release, and the linter it ships
+
+Ran 2026-09-04 over two candidates, `.route/` emptied first and each patch cut to its own change
+rather than to the range between pushes. **Seventeen findings, seventeen confirmed by executing their
+verification steps, none refuted.** Six were BLOCKER.
+
+This is the round T11 asked for. It happened after the 1.1.0 tag existed, which is the first finding
+in the table and the reason T11 now runs before T10.
+
+### On the release, `4902921..90ff4e7`
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 7.1 | UNPROVEN | BLOCKER | The installed-suite check could not fail | confirmed: `bash -e -c 'node -e "process.exit(7)" \| tail -1'` exits 0, and the run log shows the install job on `/usr/bin/bash -e` with no `pipefail` | fixed, every job declares `shell: bash` |
+| 7.2 | DEFECT | BLOCKER | The published tree fails its own gate | confirmed: scanning `.` rather than `skills/` gave 1 error and 20 warnings, not the adjudicated 14 | fixed, 0 errors and 14 warnings over `.` |
+| 7.3 | WRONG-PLAN | BLOCKER | The plan declared delivery with T11 open | confirmed by reading the task table against the verdict | T11 moved before T10 |
+| 7.4 | DEFECT | MAJOR | AC-004.2 promised a named error on every older Node | confirmed: below Node 14 the module does not parse and no guard in it runs | criterion corrected to what a single-file guard can do |
+| 7.5 | DEFECT | MAJOR | The matrix omitted the current LTS | confirmed: `node: [18, 22]` against an AC naming floor and current LTS | fixed, 18, 22 and 24 |
+| 7.6 | DEFECT | MAJOR | AC-007.2's release check did not exist | confirmed: renaming `docs/route/README.md` and running the cited command still passed | built, and it fails when a README is removed |
+| 7.7 | DEFECT | MAJOR | The install proof did not run on every push | confirmed: `push: branches: [main]` | fixed, every push |
+| 7.8 | UNPROVEN | MAJOR | The changelog proof cited a file that never shipped | confirmed: `git cat-file -e 90ff4e7:cg_probe.js` exits non-zero | proof row now cites the committed suite |
+| 7.9 | DEFECT | BLOCKER | Four commits carried 1.1.0 before the tag existed | confirmed: two CI runs installed different trees, both reporting 1.1.0 | AC-001.4 states the window and when it must close |
+| 7.10 | MISPLACED | MAJOR | The floor is copied into three files, not placed once | confirmed: `REQUIRED_NODE_MAJOR` appears in all three scripts | placement corrected, and a test asserts the three agree |
+
+### On the linter it ships, `4f4499b..4902921`
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 7.11 | DEFECT | BLOCKER | A two-backtick span bypassed the backtick rule | confirmed: a fenced span carrying `` ` `` was truncated at the inner backtick and accepted as marked | fixed, the scanner reads a fence of N |
+| 7.12 | DEFECT | MAJOR | A file-path owner was refused as two owners | confirmed at the candidate | already repaired before the tag |
+| 7.13 | SCOPE | MAJOR | The candidate changed the excluded comment-voice surface | confirmed by `git diff --name-status` | scope amended |
+| 7.14 | SCOPE | MAJOR | The suite drives tools the scope excluded | confirmed: the suite imports `route-map` and `route-history` | scope amended: testing a tool is not changing it |
+| 7.15 | UNPROVEN | BLOCKER | The receipt was not bound to the candidate | confirmed: the evidence said 154 checks, the candidate carried 145 | recorded; a freeze takes its evidence from the revision under review |
+| 7.16 | UNPROVEN | BLOCKER | CI masked a failing test process | the same defect as 7.1, reached from the other candidate | fixed with 7.1 |
+| 7.17 | MISPLACED | MAJOR | The placement named `SHELL_META`, the code has `hasShellMeta` | confirmed by `git grep -w SHELL_META` | placement corrected |
+
+**Seven of the seventeen are criteria that promised more than was built.** AC-007.2 named a release
+check nobody had written, AC-004.2 claimed coverage a single-file guard cannot have, AC-005.3 named
+an LTS the matrix did not carry, and a proof row cited a probe file that never entered the repository.
+The plan gate could not catch any of them: it checks that a proof *names a command*, not that the
+command proves what the criterion says. That is a real limit of the gate and it is written here rather
+than left for the next round to find again.
+
+**7.1 is the one that mattered most.** `node tests/... | tail -1` under `bash -e` reports `tail`'s
+status, so the job that proved the installed copy passes could not go red. Eight green jobs were
+reported for 1.1.0, and one of them was green by construction. The suite job had `shell: bash` and was
+sound; the install job did not.
+
+**7.2 came from asking a question the plan had not.** NFR-001 said "the published tree" and its proof
+scanned `skills/`. The marketplace publishes `./`. Scanning what actually ships found an error in a
+fixture full of deliberate defects — a file that existed to be wrong, sitting in the artifact users
+install. The corpus is written at run time now and asserted there, so it is exercised and nothing
+defective ships.
+
+**And two false positives that had been left as a named gap.** `comment-commented-code` refused prose
+beginning `from` and `print`. The gap was declared out of scope, and then the release requirement for
+zero unadjudicated warnings made it in scope. A keyword now counts only alongside a character that
+code carries and prose does not.
+
+158 checks pass. The gate over the whole published tree reports 0 errors and the 14 adjudicated
+warnings.
+
 ## Verdict
 
-**Delivered with gaps.**
+**Delivered with gaps, and superseded by 1.1.1.**
 
-Seven findings from the adversarial pass, all confirmed by execution and all closed. Every
-requirement and both non-functional requirements are proven by something that ran, and the two
-figures quoted — six matrix jobs and 27 seconds — are readable from run `33858165452` rather than
-asserted here.
+The seven findings this plan was written to close are closed, each by something that ran. Round 7 then
+found seventeen more, six of them BLOCKER, and every one confirmed by execution. Ten are against this
+release and seven against the linter it ships; all are repaired or their criteria corrected, and the
+result is 1.1.1.
 
-Three of the closures are worth separating from the rest, because they were proven by failure before
-they were proven by success. REQ-005 is met by a matrix whose first run went red on macOS twice and
-took the install job with it; REQ-006 is met by a job that failed at its last step before it passed;
-and REQ-003's gate was watched refusing a real forty-line `[Unreleased]` before it was watched
-accepting an empty one. A gate that has only ever been seen agreeing has not been seen working.
+The finding that governs the rest is 7.3: **this plan declared delivery while its own T11 was open.**
+The adversarial round was in the task list, placed after the tag, and the verdict was written before
+it ran. So the round could not prevent a bad 1.1.0 — it could only diagnose one. It found that an
+install job proving nothing was reported as proof, that the gate had never been run over what actually
+ships, and that seven acceptance criteria promised more than had been built.
 
-The gaps are the standing ones, and neither blocks the release: the round-6 repairs to the linter and
-the round-8 repairs to the capability fixture have not been attacked, and `comment-commented-code`
-refuses prose beginning with a keyword. Both are recorded with reproductions.
+T11 now runs before T10. That single reordering is the difference between a review that informs a
+release and one that explains it.
+
+What 1.1.0 got right is worth separating from what it claimed: the skill works, the suite passes on
+three platforms, the install succeeds, and the version names one tree. What it got wrong was the
+distance between the plan's language and its evidence, and that distance is what round 7 measured.

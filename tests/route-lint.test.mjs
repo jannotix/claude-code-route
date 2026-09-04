@@ -97,9 +97,29 @@ const check = (name, ok, detail = '') => {
   check('finding acted on without verification detected', codes.includes('finding-unverified'), codes);
 }
 
-// Comment voice over a source tree.
+// Comment voice over a source tree. The corpus is written here rather than shipped: as
+// tests/fixtures/src/sample.js it was a file full of deliberate defects inside the published tree,
+// and the gate reported them against the product's own NFR-001. Same assertions, same line numbers,
+// nothing defective in the artifact.
 {
-  const j = JSON.parse(run(lint, [fixture('clean'), fixture('src'), '--json']).out);
+  const dir = mkdtempSync(join(tmpdir(), 'route-voice-'));
+  const NL = String.fromCharCode(10);
+  writeFileSync(join(dir, 'sample.js'), [
+    '// ===============================',
+    '// Loop through the items',
+    '// TODO: handle errors',
+    '// TODO(#412): handle the empty-body case',
+    '// Step 1: validate the payload',
+    '// const legacy = buildThing();',
+    '// Vendor returns 200 with an empty body on rate limit, so status alone is not enough. (REQ-014)',
+    '// Perch\u00e9 questo \u00e8 cos\u00ec \u00e8 gi\u00e0 spiegato altrove, non in inglese',
+    '// Ship it \u{1F680} looks good',
+    '// from somewhere inside the file, which is prose and not code',
+    '// print into the test output, which is prose too',
+    'export const noop = () => {};',
+  ].join(NL), 'utf8');
+
+  const j = JSON.parse(run(lint, [fixture('clean'), dir, '--json']).out);
   const all = j.errors.concat(j.warnings);
   const at = (code) => all.filter((f) => f.code === code).map((f) => f.line);
 
@@ -111,9 +131,18 @@ const check = (name, ok, detail = '') => {
   check('useful comment not flagged', !all.some((f) => f.line === 7), JSON.stringify(all.filter((f) => f.line === 7)));
   check('non-English comment flagged', at('comment-language').includes(8), JSON.stringify(at('comment-language')));
   check('emoji comment flagged', at('comment-emoji').includes(9), JSON.stringify(at('comment-emoji')));
+
+  // Round 7: prose opening on a keyword was read as commented-out code, twice on this project's
+  // own tree. A keyword counts only alongside a character code has and prose does not.
+  check('prose beginning with a keyword is not commented-out code',
+    !at('comment-commented-code').includes(10) && !at('comment-commented-code').includes(11),
+    JSON.stringify(at('comment-commented-code')));
+
   check('--no-comments suppresses them',
-    JSON.parse(run(lint, [fixture('clean'), fixture('src'), '--json', '--no-comments']).out)
+    JSON.parse(run(lint, [fixture('clean'), dir, '--json', '--no-comments']).out)
       .warnings.filter((f) => f.code.startsWith('comment-')).length === 0);
+
+  rmSync(dir, { recursive: true, force: true });
 }
 
 // Missing artifacts fail closed.
@@ -233,6 +262,16 @@ const check = (name, ok, detail = '') => {
     "Object.defineProperty(process.versions, 'node', { value: '16.20.2', configurable: true });",
     "await import(process.argv[2]);",
   ].join('\n'), 'utf8');
+
+  // Round 7: the placement said one declaration in a shared preamble; there are three copies.
+  // A fourth file for six lines would cost more than it saves, so the copies stay and this asserts
+  // they agree -- and that the README declares the same number.
+  const floors = ['route-lint', 'route-map', 'route-history'].map((n) => {
+    const src = readFileSync(join(scripts, `${n}.mjs`), 'utf8');
+    return (src.match(/const REQUIRED_NODE_MAJOR = (\d+)/) || [])[1];
+  });
+  check('every script declares the same floor',
+    new Set(floors).size === 1 && floors[0] === '18', floors.join());
 
   const declared = readFileSync(join(here, '..', 'README.md'), 'utf8');
   check('the README declares the floor the scripts enforce', /Node 18/.test(declared));
@@ -441,6 +480,22 @@ src/
   check('a glob is a pattern, not a program',
     !closes('$ foo*') && !closes('$ fo?o') && !closes('$ foo[bar]') && !closes('$ foo{a,b}'));
   check('a version needs its digits', !closes('python.1'));
+  // Round 7: a code span is a fence of N backticks. Matching one each side truncated a
+  // two-backtick span at its inner backtick, so `$ foo`bar` was accepted as `$ foo` --
+  // with the very character AC-005.6 forbids removed by the scanner itself.
+  {
+    const BT = String.fromCharCode(96);
+    const fenced = (payload) => BT + BT + payload + BT + BT;
+    const closesRaw = (span) => {
+      writeFileSync(join(dir, 'PLAN.md'), plan(span), 'utf8');
+      return !JSON.parse(run(lint, [dir, '--json']).out)
+        .errors.some((f) => f.code === 'proof-not-executed');
+    };
+    check('a fenced span carrying a backtick does not close a requirement',
+      !closesRaw(fenced('$ foo' + BT + 'bar')));
+    check('a fenced span still closes on a real command',
+      closesRaw(fenced('pytest tests/x.py::t')));
+  }
   check('a judgement word inside a path does not make the proof prose',
     closes('pytest tests/reviewed/test.py::t'));
 

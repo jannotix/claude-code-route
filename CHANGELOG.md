@@ -6,6 +6,48 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-04
+
+The seventh adversarial round, run against 1.1.0 after it was published, found seventeen things. Six
+were BLOCKER and every one was confirmed by executing its verification step. This release repairs
+them.
+
+### Fixed
+
+- **CI could not see a failing installed suite.** The job that proves the installed copy passes ended
+  in `node tests/route-lint.test.mjs | tail -1`, and GitHub's default shell is `bash -e` with no
+  `pipefail`, so `tail` supplied the exit status. That job was green by construction. Every job now
+  declares `shell: bash`, which is `-eo pipefail`.
+- **The published tree failed the product's own gate.** NFR-001 said "the published tree" and its
+  proof scanned `skills/`; the marketplace publishes everything. Scanning what ships found an error
+  and six more warnings than the fourteen that had been ruled on — in a fixture full of deliberate
+  defects that shipped to every user. The corpus is written at run time by the test that uses it, so
+  it is exercised and nothing defective ships. The gate over the whole tree now reports 0 errors.
+- **A two-backtick code span bypassed the rule against backticks in a program.** The scanner matched
+  one backtick each side, so `` ``$ foo`bar`` `` was truncated to `$ foo` and accepted as marked —
+  with the very character the rule forbids removed by the scanner itself. It reads a fence of N
+  backticks now.
+- **`comment-commented-code` refused prose beginning with a keyword.** Sentences opening `from` and
+  `print` were reported as commented-out code, twice on this project's own tree. A keyword counts only
+  alongside a character that code carries and prose does not. This had been recorded as a known gap;
+  a release requirement for zero unadjudicated warnings made it a defect.
+- The release check that AC-007.2 promised did not exist. It does now: every published directory
+  states its purpose in a README, and the check fails when one is removed.
+- CI ran only on pushes to `main`, so a branch or tag push proved nothing. It runs on every push.
+- The Node matrix omitted the current LTS. It is 18, 22 and 24.
+
+### Changed
+
+- Four acceptance criteria promised more than had been built, and now say what is true: the runtime
+  guard cannot fire below Node 14, where the module does not parse; the floor is declared in each
+  script rather than in a shared preamble, and a test asserts the three agree; the version window
+  between bumping the manifest and cutting the tag is real and must be closed before announcing; and
+  the changelog proof cites the committed suite rather than a probe file that never shipped.
+- `docs/`, `skills/` and `tests/` carry a README saying what they are.
+- The adversarial round runs **before** the tag. In 1.1.0 it was placed after, so it could not prevent
+  a bad release — only explain one.
+
+
 ## [1.1.0] - 2026-09-04
 
 ### Fixed

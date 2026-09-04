@@ -67,6 +67,7 @@ REQ-005  An author must be able to declare a span an executed command, and the m
   AC-005.4  Given a proof cell of `$ && checked` When the plan is checked Then proof-not-executed is reported, because a shell operator is not a program
   AC-005.5  Given a proof cell of `$ /bin/true` When the plan is checked Then nothing is reported, because an absolute path is a program and not a comment
   AC-005.6  Given a proof cell whose program contains any of `< > | & ; ( ) $ ` * ? [ ] { }` When the plan is checked Then proof-not-executed is reported. Redirection, pipes, separators, substitution and globs: the set is named here so the code does not choose it, and `$ foo*` is a pattern the shell expands rather than a program the author ran
+  AC-005.8  Given a proof cell written as a two-backtick code span whose program contains a backtick When the plan is checked Then proof-not-executed is reported, because a fence of N backticks closes on N and matching one each side truncated the span at the very character AC-005.6 forbids
   AC-005.7  Given a proof cell of `python.1` or `python.` When the plan is checked Then proof-not-executed is reported, because a version is one or more digits and the pattern made them optional
 
 REQ-010  A span that is not a command must not close a requirement, whatever characters it contains. A span names a runner only when the whole program is that runner, and a runner of any length counts.
@@ -110,7 +111,7 @@ REQ-008  A Findings table that cannot express resolution must be reported once, 
 | REQ-002 | Judgement is refused outright, and a judgement word inside a backticked span is not judgement | `PROSE_PROOF` with `proseOf`, then `looksExecutable` | domain |
 | REQ-003 | Findings columns are located by header, not by position | `checkFindings` | application |
 | REQ-004 | A span is a command or it is not; nothing is inferred from its characters | `commandOf`, then `looksExecutable` | domain |
-| REQ-005 | The `$` marker must be followed by a program, and a program carries no shell metacharacter | `commandOf` over `PROGRAM_TOKEN`, `COMMENT_TOKEN`, `SHELL_META` | domain |
+| REQ-005 | The `$` marker must be followed by a program, and a program carries no shell metacharacter | `commandOf` over `PROGRAM_TOKEN`, `COMMENT_TOKEN`, `hasShellMeta` | domain |
 | REQ-010 | Only a named runner or a marked span closes a requirement | `looksExecutable` over `RUNNER` | domain |
 | REQ-011 | Findings columns are located exactly; a qualified outcome is acted on | `checkFindings` | application |
 | REQ-012 | A placeholder is not an owner | `checkPlan` | application |
@@ -128,9 +129,13 @@ that are about orchestration, and D2 is squarely the former.
 
 ## Out of scope
 
-- The comment-voice heuristics. They are documented as heuristics and are warnings, not errors.
 - A full markdown table parser. Escaped pipes and nested tables stay unsupported.
-- Anything in route-map or route-history.
+- Changing what `route-map` or `route-history` decide. The suite exercises both, and round 7 was
+  right that the earlier wording forbade even that; testing a tool is not changing it, and the
+  distinction is now written rather than assumed.
+- Rewriting the comment-voice heuristics wholesale. Two of them were repaired here because a
+  release requirement asked for zero unadjudicated warnings on the published tree and they were
+  producing false ones; the rest stay advisory, and that exception is stated rather than taken.
 
 ## Compatibility
 
@@ -411,6 +416,15 @@ Measuring the retired eval case showed none of them firing on either arm's narra
 now named with a reproduction rather than merely declared.
 
 ## Amendments
+
+Scope     amended 2026-09-04 after review round 7 (SCOPE, twice): the candidate deleted the
+          `comment-voice` eval case, lowered the eval floor, and added tests that drive
+          `route-map` and `route-history` — all of which the scope as written forbade. The
+          wording confused *changing* a tool with *testing* one, and forbade a repair that a
+          release requirement demanded. Both are now written out above.
+Evidence  the round-7 freeze cited `154/154` while the frozen candidate carried 145 checks: the
+          receipt came from HEAD, not from the revision under review. A freeze takes its
+          evidence from the candidate, and this one did not.
 
 AC-012.2  amended 2026-09-04: the separator set matched a slash anywhere, so an owner that is a
           file path was refused as two owners. Found by writing the release plan, whose INV-001 is

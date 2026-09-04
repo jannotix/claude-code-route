@@ -164,8 +164,12 @@ function commandOf(span) {
 function looksExecutable(proof) {
   // No length floor. `go`, `py`, `sh` and `ab` are runners this list names, and a floor of
   // three characters refused every one of them while `go.mod` passed as `go`.
-  for (const m of proof.matchAll(/`([^`]+)`/g)) {
-    const cmd = commandOf(m[1].trim());
+  // A code span is a fence of N backticks closed by N backticks, which is how a span that
+  // contains a backtick is written. Matching one backtick each side truncated such a span at
+  // its inner backtick, so a marked span whose program held a backtick was accepted with the
+  // backtick cut off — the character AC-005.6 forbids. (REQ-005, AC-005.8)
+  for (const m of proof.matchAll(/(`+)([^`][\s\S]*?)\1(?!`)/g)) {
+    const cmd = commandOf(m[2].trim());
     if (cmd === null) continue;
     if (cmd.explicit) return true;
     if (RUNNER.test(cmd.program)) return true;
@@ -434,7 +438,13 @@ const NON_LATIN = /[Ͱ-ϿЀ-ӿ֐-׿؀-ۿ぀-ヿ一-鿿가-힯]/;
 const ACCENTED = /[À-ɏ]/g;
 const EMOJI = /[←-⇿☀-➿⬀-⯿️]|[\ud83c-\ud83e][\udc00-\udfff]/;
 const BANNER = /([=\-*#_~])\1{4,}/;
-const CODE_LIKE = /^(if|for|while|return|def|function|const|let|var|import|from|class|public|private|await|async|print|console)\b|[;{}]\s*$/;
+// Commented-out code, not prose that happens to open on a keyword. English sentences begin
+// `from somewhere inside...` and `print into the test output...`; neither is code, and both were
+// flagged, twice on this project's own tree. A keyword counts only when the line also carries a
+// character that code has and prose does not.
+const CODE_KEYWORD = /^(if|for|while|return|def|function|const|let|var|import|from|class|public|private|await|async|print|console)\b/;
+const CODE_SHAPE = /[(=;{}]/;
+const CODE_LIKE = (line) => (CODE_KEYWORD.test(line) && CODE_SHAPE.test(line)) || /[;{}]\s*$/.test(line);
 const STEP = /^(step\s*\d+\b|\d+[.)]\s+\w)/i;
 const TASK = /\b(TODO|FIXME|HACK|XXX)\b/;
 const TASK_REFERENCED = /(#\d+|[A-Z]{2,}-\d+|@\w+|https?:\/\/)/;
@@ -481,7 +491,7 @@ function checkComments(file) {
       report('error', file, n, 'comment-task-unowned',
         'TODO/FIXME with no ticket, requirement or owner; it will never be done');
     }
-    if (CODE_LIKE.test(trimmed)) {
+    if (CODE_LIKE(trimmed)) {
       report('warn', file, n, 'comment-commented-code',
         'Looks like commented-out code; version control is the archive');
     }

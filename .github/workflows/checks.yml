@@ -1,8 +1,9 @@
 name: checks
 
 on:
+  # Every push, not only main: NFR-002 asks for the install proof on every push, and a branch
+  # or tag push without a pull request ran nothing. Found by the seventh adversarial round.
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -107,6 +108,23 @@ jobs:
             console.log("eval suite: " + cases.length + " cases, all references resolve");
           '
 
+      - name: Every published directory states its purpose
+        run: |
+          node -e '
+            const fs = require("fs");
+            const bad = [];
+            for (const e of fs.readdirSync(".", { withFileTypes: true })) {
+              if (!e.isDirectory()) continue;
+              if (e.name.startsWith(".")) continue;
+              if (fs.existsSync(e.name + "/README.md")) { console.log(e.name + ": stated"); continue; }
+              bad.push(e.name);
+            }
+            if (bad.length) {
+              console.error("published directories with no README stating their purpose: " + bad.join(", "));
+              process.exit(1);
+            }
+          '
+
       - name: Every eval scaffold is runnable bash
         run: |
           node -e '
@@ -141,7 +159,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [18, 22]
+        node: [18, 22, 24]
     defaults:
       run:
         shell: bash
@@ -216,6 +234,12 @@ jobs:
   install:
     name: install from the marketplace and run the installed suite
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        # GitHub's default shell is `bash -e` with no pipefail, so a step ending in
+        # `| tail -1` reports tail's status and a failing suite passes the build. The
+        # `bash` shell is `-eo pipefail`. Found by the seventh adversarial round.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
