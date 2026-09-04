@@ -225,21 +225,30 @@ jobs:
 
       - name: The installed copy is the tree the default branch publishes
         run: |
-          root=$(dirname "$(dirname "$(find "$HOME/.claude/plugins/cache" -type f -name route-lint.test.mjs | head -1)")")
-          test -n "$root" || { echo "no installed copy found"; exit 1; }
+          suite=$(find "$HOME/.claude/plugins/cache" -type f -name route-lint.test.mjs | head -1)
+          test -n "$suite" || { echo "no installed copy found"; exit 1; }
+          root=$(dirname "$(dirname "$suite")")
           git fetch --depth 1 origin "$GITHUB_DEFAULT_BRANCH"
+          compared=0
           differ=0
           while IFS= read -r f; do
             rel=${f#"$root"/}
+            compared=$((compared + 1))
             if ! git cat-file -e "FETCH_HEAD:$rel" 2>/dev/null; then
-              echo "installed but not published: $rel"; differ=1; continue
+              echo "installed but not published: $rel"
+              differ=1
+              continue
             fi
-            a=$(git hash-object "$f")
-            b=$(git rev-parse "FETCH_HEAD:$rel")
-            if [ "$a" != "$b" ]; then echo "differs from the published tree: $rel"; differ=1; fi
+            if [ "$(git hash-object "$f")" != "$(git rev-parse "FETCH_HEAD:$rel")" ]; then
+              echo "differs from the published tree: $rel"
+              differ=1
+            fi
           done < <(find "$root" -type f -not -path '*/.git/*')
+          echo "compared $compared files against $GITHUB_DEFAULT_BRANCH"
+          # A walk that finds nothing leaves differ at 0, which is how a comparison passes without
+          # comparing. The tag carried 49 files; the floor catches an empty walk, not a count.
+          test "$compared" -ge 20 || { echo "compared too few files to prove anything"; exit 1; }
           test "$differ" -eq 0 || { echo "the installed copy is not the published tree"; exit 1; }
-          echo "every installed file matches $GITHUB_DEFAULT_BRANCH"
         env:
           GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
