@@ -276,6 +276,12 @@ const check = (name, ok, detail = '') => {
   const declared = readFileSync(join(here, '..', 'README.md'), 'utf8');
   check('the README declares the floor the scripts enforce', /Node 18/.test(declared));
 
+  // Round 8: the manifest is the fifth declaration and nothing read it. Set to >=20.0.0 against
+  // scripts enforcing 18, the suite still reported 158/158. (REQ-004, AC-004.1)
+  const engines = JSON.parse(readFileSync(join(here, '..', '.claude-plugin', 'plugin.json'), 'utf8')).engines?.node ?? '';
+  check('the manifest declares the floor the scripts enforce',
+    (engines.match(/(\d+)/) || [])[1] === floors[0], `engines.node ${engines} against ${floors[0]}`);
+
   for (const name of ['route-lint', 'route-map', 'route-history']) {
     const url = pathToFileURL(join(scripts, `${name}.mjs`)).href;
     const r = run(probe, [url]);
@@ -735,6 +741,74 @@ src/
   }
 
   check('case names are unique', new Set(names).size === names.length, names.join());
+}
+
+// Round 8: the plan claimed this suite ran the changelog gate both ways, and the suite carried no
+// mention of it. The gate is a module now, and this is that claim executed. (REQ-003, AC-003.2, AC-003.3)
+{
+  const gate = join(here, '..', '.github', 'changelog-gate.mjs');
+  const { unreleasedEntries } = await import(pathToFileURL(gate).href);
+  const NL = String.fromCharCode(10);
+
+  const held = ['# Changelog', '', '## [Unreleased]', '', '### Fixed', '', '- a thing nobody versioned',
+    '', '## [1.0.0] - 2026-01-01', '', '- shipped'].join(NL);
+  const cut = ['# Changelog', '', '## [Unreleased]', '', '## [1.0.1] - 2026-02-02', '', '### Fixed',
+    '', '- a thing nobody versioned', '', '## [1.0.0] - 2026-01-01', '', '- shipped'].join(NL);
+
+  check('an entry left under [Unreleased] is reported',
+    unreleasedEntries(held).length === 1, unreleasedEntries(held).join());
+  check('the same entry moved under a version heading is not',
+    unreleasedEntries(cut).length === 0, unreleasedEntries(cut).join());
+  check('a subheading with nothing under it is not an entry',
+    unreleasedEntries(['## [Unreleased]', '', '### Fixed', '', '## [1.0.0]'].join(NL)).length === 0);
+  check('a changelog with no [Unreleased] section is not an error',
+    unreleasedEntries(['# Changelog', '', '## [1.0.0]', '', '- shipped'].join(NL)).length === 0);
+
+  const dir = mkdtempSync(join(tmpdir(), 'route-changelog-'));
+  writeFileSync(join(dir, 'HELD.md'), held, 'utf8');
+  writeFileSync(join(dir, 'CUT.md'), cut, 'utf8');
+  const a = run(gate, [join(dir, 'HELD.md')]);
+  const b = run(gate, [join(dir, 'CUT.md')]);
+  check('the gate exits 1 and names the section',
+    a.code === 1 && a.err.includes('unreleased line'), `exit ${a.code}: ${a.err.trim()}`);
+  check('the gate exits 0 once the version is cut', b.code === 0, `exit ${b.code}: ${b.err.trim()}`);
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// Round 8: the release check tested that a README existed. Three empty ones and an undocumented
+// directory passed it with exit 0, and AC-007.2 asks for a stated purpose. (REQ-007, AC-007.2)
+{
+  const check_script = join(here, '..', '.github', 'published-dirs.mjs');
+  const { undocumented } = await import(pathToFileURL(check_script).href);
+  const NL = String.fromCharCode(10);
+
+  const dir = mkdtempSync(join(tmpdir(), 'route-dirs-'));
+  for (const d of ['docs', 'skills', 'tests']) mkdirSync(join(dir, d), { recursive: true });
+  mkdirSync(join(dir, '.github'), { recursive: true });
+  writeFileSync(join(dir, 'docs', 'README.md'), '', 'utf8');
+  writeFileSync(join(dir, 'skills', 'README.md'), ['# Skills', '', '## What'].join(NL), 'utf8');
+  writeFileSync(join(dir, 'tests', 'README.md'),
+    'The suite that proves the scripts, shipped so the commit carries its own evidence.', 'utf8');
+
+  const bad = undocumented(dir);
+  check('an empty README does not state a purpose',
+    bad.some((b) => b.dir === 'docs' && b.prose === 0), JSON.stringify(bad));
+  check('headings alone do not state a purpose',
+    bad.some((b) => b.dir === 'skills'), JSON.stringify(bad));
+  check('prose past the floor does', !bad.some((b) => b.dir === 'tests'), JSON.stringify(bad));
+  check('a dot directory is not published', !bad.some((b) => b.dir === '.github'), JSON.stringify(bad));
+
+  const r = run(check_script, [dir]);
+  check('the check exits 1 and names every directory that failed',
+    r.code === 1 && r.err.includes('docs:') && r.err.includes('skills:'), `exit ${r.code}: ${r.err.trim()}`);
+
+  writeFileSync(join(dir, 'docs', 'README.md'),
+    'What ships here and why: the cycle artifacts this repository keeps in public.', 'utf8');
+  writeFileSync(join(dir, 'skills', 'README.md'),
+    ['# Skills', '', 'The one skill this plugin installs, and the scripts it resolves at run time.'].join(NL), 'utf8');
+  const ok = run(check_script, [dir]);
+  check('the check exits 0 once every directory states one', ok.code === 0, `exit ${ok.code}: ${ok.err.trim()}`);
+  rmSync(dir, { recursive: true, force: true });
 }
 
 const failed = results.filter((r) => !r.ok);

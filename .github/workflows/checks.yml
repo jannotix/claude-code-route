@@ -36,24 +36,7 @@ jobs:
         run: |
           v=$(node -p "require('./.claude-plugin/plugin.json').version")
           grep -q "^## \[$v\]" CHANGELOG.md || { echo "CHANGELOG.md has no entry for $v"; exit 1; }
-          node -e '
-            const fs = require("fs");
-            const NL = String.fromCharCode(10);
-            const lines = fs.readFileSync("CHANGELOG.md", "utf8").split(NL);
-            const i = lines.findIndex(l => l.trim() === "## [Unreleased]");
-            if (i === -1) process.exit(0);
-            const body = [];
-            for (const l of lines.slice(i + 1)) {
-              if (l.startsWith("## ")) break;
-              if (l.trim() !== "" && !l.startsWith("###")) body.push(l.trim());
-            }
-            if (body.length) {
-              console.error("CHANGELOG.md has " + body.length + " unreleased line(s); cut a version before shipping");
-              console.error("  first: " + body[0].slice(0, 90));
-              process.exit(1);
-            }
-            console.log("[Unreleased] is empty");
-          '
+          node .github/changelog-gate.mjs CHANGELOG.md
 
       - name: Skill frontmatter
         run: |
@@ -117,21 +100,7 @@ jobs:
           '
 
       - name: Every published directory states its purpose
-        run: |
-          node -e '
-            const fs = require("fs");
-            const bad = [];
-            for (const e of fs.readdirSync(".", { withFileTypes: true })) {
-              if (!e.isDirectory()) continue;
-              if (e.name.startsWith(".")) continue;
-              if (fs.existsSync(e.name + "/README.md")) { console.log(e.name + ": stated"); continue; }
-              bad.push(e.name);
-            }
-            if (bad.length) {
-              console.error("published directories with no README stating their purpose: " + bad.join(", "));
-              process.exit(1);
-            }
-          '
+        run: node .github/published-dirs.mjs .
 
       - name: Every eval scaffold is runnable bash
         run: |
@@ -253,6 +222,26 @@ jobs:
         run: |
           claude plugin marketplace add "$GITHUB_REPOSITORY"
           claude plugin install claude-code-route
+
+      - name: The installed copy is the tree the default branch publishes
+        run: |
+          root=$(dirname "$(dirname "$(find "$HOME/.claude/plugins/cache" -type f -name route-lint.test.mjs | head -1)")")
+          test -n "$root" || { echo "no installed copy found"; exit 1; }
+          git fetch --depth 1 origin "$GITHUB_DEFAULT_BRANCH"
+          differ=0
+          while IFS= read -r f; do
+            rel=${f#"$root"/}
+            if ! git cat-file -e "FETCH_HEAD:$rel" 2>/dev/null; then
+              echo "installed but not published: $rel"; differ=1; continue
+            fi
+            a=$(git hash-object "$f")
+            b=$(git rev-parse "FETCH_HEAD:$rel")
+            if [ "$a" != "$b" ]; then echo "differs from the published tree: $rel"; differ=1; fi
+          done < <(find "$root" -type f -not -path '*/.git/*')
+          test "$differ" -eq 0 || { echo "the installed copy is not the published tree"; exit 1; }
+          echo "every installed file matches $GITHUB_DEFAULT_BRANCH"
+        env:
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
       - name: The installed copy runs its own suite
         run: |

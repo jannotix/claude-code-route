@@ -313,7 +313,7 @@ by execution, none refuted.** The prediction above — that a fourth round would
 to route to Plan. Rounds 1 to 4 each found the rule itself wrong — `checked`, `a b`, `e.g. checked`,
 `README.md` — and round 3 answered by removing the inference from a span's characters. 4.1 and 4.2
 are not that failure returning: the rule is unchanged and correct, and what was wrong was a length
-floor of three characters and a `` where `$` belonged. Two leftovers of the design that was
+floor of three characters and a `` ` `` where `$` belonged. Two leftovers of the design that was
 deleted. Fixing them at Execute is the routing test applied honestly: neither changes what must be
 true.
 

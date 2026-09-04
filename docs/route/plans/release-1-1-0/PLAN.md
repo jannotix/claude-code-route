@@ -22,8 +22,9 @@ who are not in this conversation. A wrong one cannot be taken back — it can on
 REQ-001  A version string must identify exactly one artifact.
   AC-001.1  Given the version in `.claude-plugin/plugin.json` When a user installs from the marketplace and a reader checks out the matching tag Then the two trees are identical
   AC-001.2  Given a release tag When `git rev-list --count <tag>..main` is run Then it prints 0, or the difference is itself a released version
-  AC-001.4  Given the interval between bumping the manifest and cutting the tag When a commit in it is installed Then it reports a version whose tag does not yet exist. The window is real and this release spent four commits inside it; the criterion is that the window is closed before the release is announced, not that it never opens
+  AC-001.4  Given the commit that bumps `.claude-plugin/plugin.json` When the tag for that version is cut Then it points at that same commit, so no commit ever declares a version whose tag does not exist. 1.1.0 spent four commits in that window and 1.1.1 spent two; the window is closed by ordering, not by declaring it
   AC-001.3  Given a bug report naming a version When the maintainer checks out that tag Then the behaviour the reporter saw is reproducible from it
+  AC-001.5  Given the copy the marketplace installs When every file it carries is hashed against the same path on the default branch Then no file differs and none is absent, and CI performs this comparison rather than a reader
 
 REQ-002  The published tree must not carry an operator's identity unless publishing it is a recorded decision.
   AC-002.1  Given the versioned tree When it is searched for the operator's address Then either no match is found, or `docs/route/README.md` states that the history is published with attribution on purpose
@@ -36,13 +37,13 @@ REQ-003  A release must leave no user-visible change unversioned.
   AC-003.3  Given the same changelog with that entry moved under a version heading When CI runs Then it passes
 
 REQ-004  The runtime the scripts require must be declared and must fail clearly below it.
-  AC-004.1  Given the README and the plugin manifest When a reader looks for the required Node version Then both state the same floor
-  AC-004.2  Given a Node between 14 and the floor When any of the three scripts is run Then it exits 2 with a message naming the required version. Below Node 14 the module is parsed before any of it executes and the optional-chaining in it is a syntax error, so no guard inside the file can run; that is a limit of a single-file guard and not something this criterion claims to cover
+  AC-004.1  Given the README, the plugin manifest and the three scripts When the required Node version is read from each Then all five state the same floor, asserted by the suite and not by a reader
+  AC-004.2  Given a Node from 14.13.1 to the floor When any of the three scripts is run Then it exits 2 with a message naming the required version, measured at 14.13.1 and 16.20.2. Below 14.13.1 the `node:` specifiers are resolved before any statement in the file executes and the run ends with `ERR_UNSUPPORTED_ESM_URL_SCHEME` at exit 1, measured at 14.13.0; below 14 the optional-chaining is a syntax error. Both are limits of a guard living inside the file it guards, and the criterion claims neither
   AC-004.3  Given a Node at the floor exactly When the test suite is run Then it passes
 
 REQ-005  Continuous integration must exercise every operating system the plugin is documented to support.
   AC-005.1  Given the CI workflow When its matrix is read Then it includes Linux, macOS and Windows
-  AC-005.2  Given the lock defect that returned `EPERM` on Windows and exit 1 When it is reintroduced on a branch Then the Windows job fails
+  AC-005.2  Given the lock defect that returned `EPERM` on Windows and exit 1 When it is reintroduced Then the Windows job fails on the runs that hit the race. Round 6 measured the race at about one writer in 250, so one green run is not evidence the regression would be caught; this criterion closes probabilistically and the gap is named below
   AC-005.3  Given the matrix When it is read Then it includes the declared Node floor and the current LTS
 
 REQ-006  A release must be proven by installing it, not by inspecting it.
@@ -50,9 +51,9 @@ REQ-006  A release must be proven by installing it, not by inspecting it.
   AC-006.2  Given that installed copy When its own test suite is run from the installed path Then it passes
   AC-006.3  Given AC-006.1 and AC-006.2 When CI runs Then both are executed there, not only by hand
 
-REQ-007  Every directory in the published tree must have a stated reason to be there.
+REQ-007  Every top-level directory in the published tree must have a stated reason to be there.
   AC-007.1  Given `docs/route/` in the published tree When a reader opens it Then a README in that directory says what it is and why it ships
-  AC-007.2  Given any published directory with no such statement When the release check runs Then it is reported
+  AC-007.2  Given a top-level published directory whose README is missing, or carries fewer than 40 characters outside its headings When the release check runs Then it is reported. The check reads the top level only; a nested directory is described by the README above it, and that is the depth this criterion claims
 
 ## Non-functional requirements
 
@@ -73,11 +74,11 @@ NFR-002  Install cost: a first install and its verification complete in under 5 
 | --- | --- | --- | --- |
 | REQ-001 | A version names one tree; the tag and the installed artifact agree | `.claude-plugin/plugin.json` with the release tag | release |
 | REQ-002 | Identity is recorded only when recording it was decided | `route-history.mjs` for the switch, `docs/route/README.md` for the decision | release |
-| REQ-003 | Nothing user-visible ships without a version heading | `.github/workflows/checks.yml` | release |
+| REQ-003 | Nothing user-visible ships without a version heading | `.github/changelog-gate.mjs`, called by the workflow and exercised by the suite | release |
 | REQ-004 | The runtime floor is declared at each script's entry, and the three declarations are asserted equal | each script's preamble, checked by `tests/route-lint.test.mjs` | release |
 | REQ-005 | The matrix covers the platforms the README claims | `.github/workflows/checks.yml` | release |
 | REQ-006 | A release is proven by installing it | `.github/workflows/checks.yml` | release |
-| REQ-007 | Every published directory declares its purpose | `docs/route/README.md` and the release check | release |
+| REQ-007 | Every top-level published directory declares its purpose | `docs/README.md`, `skills/README.md`, `tests/README.md` and `docs/route/README.md`, reported by `.github/published-dirs.mjs`, which the workflow calls | release |
 | NFR-001 | Zero errors, and every warning ruled on in writing | this plan's Adjudicated warnings section | release |
 | NFR-002 | The install proof is cheap enough to always run | `.github/workflows/checks.yml` | release |
 
@@ -122,7 +123,7 @@ INV-002  The history chain verifies, and any deliberate rewrite of it is recorde
 
 ## Scope
 
-    .claude-plugin/plugin.json, .github/workflows/checks.yml, CHANGELOG.md, README.md, SECURITY.md, docs/route/**, skills/claude-code-route/scripts/**, tests/**
+    .claude-plugin/plugin.json, .github/**, CHANGELOG.md, README.md, SECURITY.md, docs/**, skills/README.md, skills/claude-code-route/scripts/**, tests/**
 
 ## Out of scope
 
@@ -225,12 +226,12 @@ reproducible by anyone holding the commit.
 | --- | --- | --- |
 | REQ-001 | `$ git rev-list --count claude-code-route--v1.1.0..main` returning 0 at the tag | pass |
 | REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
-| REQ-003 | `node tests/route-lint.test.mjs` — the changelog gate extracted from the workflow and run both ways: exit 1 on a non-empty `[Unreleased]` naming its first entry, exit 0 on an empty one | pass |
-| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; and the README states the same floor | pass |
+| REQ-003 | `node tests/route-lint.test.mjs` — six checks import `.github/changelog-gate.mjs`, the file the workflow calls, and run it both ways: exit 1 naming the first unreleased line, exit 0 once that entry sits under a version heading. Gutting the gate to return nothing fails two of them | pass |
+| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the three declarations, the README and `engines.node` are asserted equal, and setting `engines.node` to `>=20.0.0` fails that check | pass |
 | REQ-005 | `$ gh run view 33858165452` — six matrix jobs green across Linux, macOS and Windows at Node 18 and 22 | pass |
 | REQ-006 | `$ gh run view 33858165452` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
-| REQ-007 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 --stage plan --layers domain,application,release` | pass |
-| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 skills/ --layers domain,application,release --json` — 0 errors, and the Adjudicated warnings section rules on all 14 it reports | pass |
+| REQ-007 | `node tests/route-lint.test.mjs` — six checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
+| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — over the whole published tree, which is what the marketplace ships: 0 errors, and the Adjudicated warnings section rules on all 14 it reports | pass |
 | NFR-002 | `$ gh run view 33858165452` — install job start to finish, 27 seconds against a budget of 300 | pass |
 
 **What the matrix found on its first run, which is why REQ-005 exists.** Six jobs, and two failed:
@@ -255,11 +256,11 @@ whether this repository's own cycle artifacts are a demonstration or clutter. Bo
 requester's, both are recorded as open, and T1 and T3 are blocked until they are answered. Guessing
 either would be the failure this method exists to prevent.
 
-**`comment-commented-code` refuses prose that starts with a keyword.** Reproduction: a comment line
-beginning `from somewhere inside the file...` is reported as commented-out code, because the rule
-matches `^(if|for|...|from|...)` with no requirement that the line also look like code. Three
-lines in this release tripped it. Out of scope here and in the lint plan, which declares the
-comment-voice heuristics advisory; recorded so the next round has its case ready.
+**AC-005.2 closes probabilistically and cannot close otherwise.** The Windows lock defect appeared
+about once in 250 writers when round 6 measured it. The suite asserts that no writer failed outside
+the contract, which holds on every run the race does not occur, so a green Windows job is consistent
+with the regression being present. Closing this needs the lock acquisition injected with a fault
+rather than raced against, and that is a change to `route-history` this release does not make.
 
 **The round-6 repairs to the linter and the round-8 repairs to the capability fixture have not been
 attacked.** They are not part of this plan and do not block a release, but a release ships them.
@@ -325,6 +326,44 @@ code carries and prose does not.
 
 158 checks pass. The gate over the whole published tree reports 0 errors and the 14 adjudicated
 warnings.
+
+## Round 8 — the 1.1.1 repairs, attacked
+
+Ran 2026-09-05 over `claude-code-route--v1.1.0..claude-code-route--v1.1.1`, the change and nothing
+else, with the evidence taken from the revision under review. **Ten findings, nine confirmed by
+executing their verification steps, one refuted by its own.** Three were BLOCKER.
+
+This is the round 1.1.1 shipped without. It ran after the tag again, and finding 8.5 is that fact.
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 8.1 | WRONG-PLAN | BLOCKER | AC-001.4 permits what AC-001.2 forbids: two trees, one version | confirmed: `f35864c` and `d9d1466` both declare 1.1.1 and differ in `.github/workflows/checks.yml` | open |
+| 8.2 | DEFECT | BLOCKER | A mismatched backtick fence still closes a proof | **refuted**: the finding's own probe returns no match — three backticks closed by two matches nothing, so no span is accepted | discarded, counter-evidence recorded |
+| 8.3 | DEFECT | MAJOR | AC-004.2 overclaims across the whole of Node 14 | confirmed by execution: 14.13.0 exits 1 with `ERR_UNSUPPORTED_ESM_URL_SCHEME`, because the `node:` specifiers link before the guard runs; 14.13.1 and 16.20.2 exit 2 with the named message | open |
+| 8.4 | DEFECT | MAJOR | The directory check tests existence, not purpose | confirmed by execution: three empty `README.md` files and an undocumented `skills/undocumented/` pass the step with exit 0 | open |
+| 8.5 | UNPROVEN | BLOCKER | The tagged repairs were never reviewed | confirmed: `90ff4e7..claude-code-route--v1.1.1` carries two commits, one of them the tag | open |
+| 8.6 | UNPROVEN | BLOCKER | Nothing recorded compares the installed tree with the tag | confirmed: the install job installs and runs the suite, and compares no hash; the plan's proof row cites the 1.1.0 ancestry instead | open |
+| 8.7 | UNPROVEN | MAJOR | The changelog proof cites a suite that does not carry it | confirmed: `CHANGELOG` and `Unreleased` appear nowhere in `tests/route-lint.test.mjs` | open |
+| 8.8 | UNPROVEN | MAJOR | The Windows EPERM check passes vacuously | confirmed by reading: the assertion holds whenever the race does not occur, and round 6 measured it at about one writer in 250 | open |
+| 8.9 | UNPROVEN | MAJOR | Nothing asserts the manifest's floor | confirmed by execution: `engines.node` set to `>=20.0.0` against scripts declaring 18, and the suite still reports 158/158 | open |
+| 8.10 | MISPLACED | MAJOR | REQ-007 landed in three files, two outside scope | confirmed: `docs/README.md` and `skills/README.md` are added by the candidate and named by neither the placement row nor the scope | open |
+
+**8.7 is the same defect as 7.8, on the same requirement.** Round 7 found REQ-003's proof citing
+`cg_probe.js`, a file that never entered the repository; the repair replaced it with a citation to
+the committed suite, which does not carry that gate either. A second finding on one requirement goes
+to Plan whatever its class, and this one earns it: the requirement's proof has been wrong twice.
+
+**8.1 is a contradiction the round-7 repair introduced.** AC-001.4 was written to state the window
+between bumping the manifest and cutting the tag. AC-001.2 requires one artifact per version. Stating
+a violation as a criterion does not satisfy the criterion it violates.
+
+**8.5 and 8.6 are the honest shape of the release.** The installed tree *was* compared with the tag
+by hand — 49 of 49 files identical — and the comparison is in no proof row and in no job. A check
+that exists only in a transcript is the thing this skill exists to refuse.
+
+**8.2 is the first refuted finding in eight rounds.** Its verification step, run unchanged, returns
+no match: the scanner's fence is anchored and a three-backtick opening is not closed by two. The
+reviewer's own probe, visible in its transcript, had already returned `accepted: false` twice.
 
 ## Verdict
 
