@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "claude-code-route",
   "displayName": "Claude Code Route",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Three roles in a cycle - plan, execute, review - where every requirement names the symbol that owns it and closes only on something that was executed.",
   "author": {
     "name": "Gianluca Iannotta",
@@ -22,5 +22,8 @@
   ],
   "experimental": {
     "evals": "evals"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

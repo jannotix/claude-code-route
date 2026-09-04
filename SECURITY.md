@@ -11,7 +11,27 @@ account, no network call of its own, and no dependencies.
 | --- | --- | --- | --- |
 | `route-lint.mjs` | The plan and the source paths you pass it | Nothing | Nothing |
 | `route-map.mjs` | Directory metadata, file sizes, manifests | Nothing | `git log`, `git rev-parse` |
-| `route-history.mjs` | The history file | Appends to the history file | `git config`, `git rev-parse` |
+| `route-history.mjs` | The history file, and your git identity — see below | Appends to the history file | `git config`, `git rev-parse` |
+
+### Your identity in the history file
+
+`route-history append` reads `git config user.name` and `user.email` and writes them into the
+entry as `actor.operator`. That file is meant to be committed, and many projects publish it. The
+identity therefore leaves the machine that wrote it, which is worth knowing before the first
+append rather than after.
+
+To keep it out:
+
+```bash
+node scripts/route-history.mjs append --event cycle.planned --model <id> --no-operator
+```
+
+`ROUTE_NO_OPERATOR=1` in the environment does the same for a whole session or a CI job. The field
+is omitted entirely — not blanked — and the hash chain verifies exactly as before. The switch beats
+an explicit `--operator`, so a stale flag in a script cannot defeat it.
+
+Nothing else in this project reads your identity, and nothing sends it anywhere: the scripts make
+no network call.
 
 They run with your privileges and no sandbox, as any script you run does. None of them opens a
 network connection, and none reads a file body except the plan, the sources you name, the manifests

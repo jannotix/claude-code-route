@@ -6,6 +6,23 @@
 //
 // Enrich the result one cycle at a time. A full-repository indexing pass is never the answer.
 
+
+// The scripts are plain ESM with no dependencies and use nothing newer than Node 18. This says so
+// out loud, because a version error should name the version rather than surface as a stack trace
+// raised somewhere inside. It cannot help below Node 14: the module is parsed before any of
+// it runs, and the null-coalescing operator is a syntax error there, so no guard here executes.
+// requires Node 22, so inside the plugin this check never fires; it is for the scripts run
+// standalone, from a project's own CI. (REQ-004, AC-004.2)
+const REQUIRED_NODE_MAJOR = 18;
+{
+  const major = Number(process.versions.node.split('.')[0]);
+  if (Number.isFinite(major) && major < REQUIRED_NODE_MAJOR) {
+    process.stderr.write(
+      `route-map: needs Node ${REQUIRED_NODE_MAJOR} or newer; this is ${process.versions.node}\n`);
+    process.exit(2);
+  }
+}
+
 import { readdirSync, statSync, existsSync, readFileSync } from 'node:fs';
 import { join, relative, extname, basename, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';

@@ -10,6 +10,23 @@
 // The stage says which gate is being checked, because a plan is complete before a proof exists.
 // Default is review, which checks everything.
 
+
+// The scripts are plain ESM with no dependencies and use nothing newer than Node 18. This says so
+// out loud, because a version error should name the version rather than surface as a stack trace
+// raised somewhere inside. It cannot help below Node 14: the module is parsed before any of
+// it runs, and the null-coalescing operator is a syntax error there, so no guard here executes.
+// requires Node 22, so inside the plugin this check never fires; it is for the scripts run
+// standalone, from a project's own CI. (REQ-004, AC-004.2)
+const REQUIRED_NODE_MAJOR = 18;
+{
+  const major = Number(process.versions.node.split('.')[0]);
+  if (Number.isFinite(major) && major < REQUIRED_NODE_MAJOR) {
+    process.stderr.write(
+      `route-lint: needs Node ${REQUIRED_NODE_MAJOR} or newer; this is ${process.versions.node}\n`);
+    process.exit(2);
+  }
+}
+
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, extname, relative, basename, sep } from 'node:path';
 
@@ -211,7 +228,10 @@ function checkPlan(planPath, stage, layers) {
       if (!named || isPlaceholder(named) || named === '?') {
         report('error', planPath, d.line, 'invariant-unowned',
           `${d.id} names no owner; an invariant with none is enforced by convention, which is to say sometimes`);
-      } else if (/[,/&]|\s+and\s+/i.test(named)) {
+      // A separator separates: it carries whitespace. `.claude-plugin/plugin.json` and
+      // `Order.applyDiscount` are each one name, and refusing them refused correct work,
+      // which is the failure mode a gate does not survive twice. (REQ-012, AC-012.2)
+      } else if (/,|\s[/&]\s|\s+and\s+/i.test(named)) {
         report('error', planPath, d.line, 'invariant-two-owners',
           `${d.id} names more than one owner; two enforcements of one rule drift apart`);
       }

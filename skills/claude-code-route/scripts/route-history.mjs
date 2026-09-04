@@ -9,6 +9,23 @@
 //
 // Entries are never edited. A correction is a new entry. Exit 1 on a broken chain.
 
+
+// The scripts are plain ESM with no dependencies and use nothing newer than Node 18. This says so
+// out loud, because a version error should name the version rather than surface as a stack trace
+// raised somewhere inside. It cannot help below Node 14: the module is parsed before any of
+// it runs, and the null-coalescing operator is a syntax error there, so no guard here executes.
+// requires Node 22, so inside the plugin this check never fires; it is for the scripts run
+// standalone, from a project's own CI. (REQ-004, AC-004.2)
+const REQUIRED_NODE_MAJOR = 18;
+{
+  const major = Number(process.versions.node.split('.')[0]);
+  if (Number.isFinite(major) && major < REQUIRED_NODE_MAJOR) {
+    process.stderr.write(
+      `route-history: needs Node ${REQUIRED_NODE_MAJOR} or newer; this is ${process.versions.node}\n`);
+    process.exit(2);
+  }
+}
+
 import { readFileSync, appendFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -34,6 +51,9 @@ function opt(name, fallback = null) {
   const v = argv[i + 1];
   return v.startsWith('--') ? fallback : v;
 }
+
+// A switch is present or absent; it takes no value.
+const flag = (name) => argv.includes(`--${name}`);
 
 const list = (name) => {
   const v = opt(name);
@@ -173,7 +193,7 @@ function appendUnderLock(event, model) {
     actor: {
       model,
       harness: opt('harness', 'claude-code'),
-      operator: opt('operator', operatorFromGit()),
+      operator: operatorOf(),
     },
     change: {
       slug: opt('slug'),
@@ -200,6 +220,17 @@ function appendUnderLock(event, model) {
 
   appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8');
   process.stdout.write(`${file}: #${entry.seq} ${entry.event} ${entry.ts}\n`);
+}
+
+// Who acted, taken from git unless the operator has asked not to be recorded. The history is
+// committed and often published, so the identity it carries leaves the machine that wrote it.
+// `--no-operator`, or ROUTE_NO_OPERATOR in the environment for a whole session or a CI run,
+// omits the field; the chain verifies either way. The switch beats an explicit `--operator`,
+// because a privacy switch that a stale flag in somebody's script can override is not one.
+// (REQ-002, AC-002.2)
+function operatorOf() {
+  if (flag('no-operator') || process.env.ROUTE_NO_OPERATOR) return undefined;
+  return opt('operator', operatorFromGit());
 }
 
 function operatorFromGit() {

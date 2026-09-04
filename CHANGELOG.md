@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-04
+
 ### Fixed
 
 - Four more false answers in the proof gate, found by a fifth adversarial round. `$ 2>out` closed a
@@ -36,6 +38,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- The changelog gate fails when `[Unreleased]` holds an entry. It previously checked only that the
+  manifest version appeared somewhere in the file, which passed while four commits of user-visible
+  behaviour change sat unversioned — the defect that made this release necessary.
 - The eval suite is three cases. `comment-voice` was retired after three prompt and grader designs
   failed to separate the arms; the property it measured is real but is not separable by a binary
   rubric on one file. Its prompt, graders and both observed outputs are kept internally as a
@@ -55,6 +60,25 @@ All notable changes to this project are documented here. The format follows
 - Every eval case carries a `scaffold_script` and builds its own repository.
 
 ### Added
+
+- `route-history append --no-operator`, and `ROUTE_NO_OPERATOR` in the environment for a whole
+  session or a CI job. The history records `git config user.name` and `user.email` into a file you
+  will commit and may publish; until now nothing said so and nothing let you decline. The field is
+  omitted entirely rather than blanked, the hash chain verifies either way, and the switch beats an
+  explicit `--operator`, because a privacy switch a stale flag can override is not one. `SECURITY.md`
+  now says all of this where a reader looks for what leaves their machine.
+- A declared runtime floor. The scripts need **Node 18**; the README and the plugin manifest both say
+  so, and each script refuses an older runtime by name with exit 2 rather than surfacing a stack
+  trace. The guard cannot help below Node 14, where the module does not parse — that limit is stated
+  rather than glossed. Claude Code itself requires Node 22, so inside the plugin the floor is already
+  met; the lower number matters when the scripts run standalone from a project's own CI.
+- `docs/route/README.md`. That directory is the skill used on itself, and it now says so: which plan
+  is which, what the history is, and why the author's attribution is published on purpose.
+- CI runs the test suite on **Linux, macOS and Windows**, at Node 18 and 22. The lock defect fixed in
+  this version was Windows-only and was found by hand; a single-platform matrix could not have caught
+  it and now would.
+- CI installs the plugin from the marketplace and runs the installed copy's own suite, so a release
+  is proven by installing it rather than by inspecting the tree.
 
 - Probes covering every false answer the five review rounds produced, in both directions. The
   executable predicate is checked over 54 spans; the suite is 149 checks.

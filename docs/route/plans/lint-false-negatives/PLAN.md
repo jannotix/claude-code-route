@@ -85,8 +85,9 @@ REQ-011  A Findings table that cannot show what confirmed a finding must be repo
 
 REQ-012  An unfilled owner placeholder must not count as an owner, and an Owner cell that separates two names must be reported.
   AC-012.1  Given INV-001 whose Owner is the template placeholder When the plan is checked Then invariant-unowned is reported
-  AC-012.2  Given INV-001 whose Owner cell separates two names with a comma, a slash, an ampersand
-            or the word `and` in any case When the plan is checked Then invariant-two-owners is reported
+  AC-012.2  Given INV-001 whose Owner cell separates two names with a comma, or with a slash, an ampersand
+            or the word `and` in any case **surrounded by whitespace** When the plan is checked Then invariant-two-owners is reported
+  AC-012.4  Given INV-001 whose single owner is `.claude-plugin/plugin.json` or `src/billing/money.py` When the plan is checked Then nothing is reported, because a path is one name and a separator carries whitespace
   AC-012.3  Given INV-001 whose single owner is `Order.applyDiscount` When the plan is checked Then nothing is reported, because a dotted symbol is one name
 
 REQ-006  An invariant must name its owner where it is stated.
@@ -410,6 +411,11 @@ Measuring the retired eval case showed none of them firing on either arm's narra
 now named with a reproduction rather than merely declared.
 
 ## Amendments
+
+AC-012.2  amended 2026-09-04: the separator set matched a slash anywhere, so an owner that is a
+          file path was refused as two owners. Found by writing the release plan, whose INV-001 is
+          owned by `.claude-plugin/plugin.json`. A separator now carries whitespace. This is the
+          second time this gate has refused correct work; the first was 5.3.
 
 AC-003.1  amended 2026-09-01 after review round 4 (4.4): it named `finding-unverified`, which REQ-008
           superseded when the once-per-table rule was added. The code was right and the criterion stale.

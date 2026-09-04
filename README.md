@@ -11,6 +11,10 @@ Three roles, one cycle, and code that was actually run.
     └──────────────────  UNDERSPECIFIED · WRONG-PLAN
 ```
 
+Requires **Node 18 or newer** for the three scripts. Claude Code itself requires Node 22, so inside
+the plugin the floor is already met; the lower number matters when the scripts run standalone, from
+a project's own CI.
+
 ```bash
 git clone https://github.com/jannotix/claude-code-route.git
 cp -r claude-code-route/skills/claude-code-route ~/.claude/skills/

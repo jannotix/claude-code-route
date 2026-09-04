@@ -23,10 +23,28 @@ jobs:
           node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json'))"
           node -e "JSON.parse(require('fs').readFileSync('.claude-plugin/marketplace.json'))"
 
-      - name: Manifest version matches the changelog
+      - name: Manifest version matches the changelog, and nothing ships unversioned
         run: |
           v=$(node -p "require('./.claude-plugin/plugin.json').version")
           grep -q "^## \[$v\]" CHANGELOG.md || { echo "CHANGELOG.md has no entry for $v"; exit 1; }
+          node -e '
+            const fs = require("fs");
+            const NL = String.fromCharCode(10);
+            const lines = fs.readFileSync("CHANGELOG.md", "utf8").split(NL);
+            const i = lines.findIndex(l => l.trim() === "## [Unreleased]");
+            if (i === -1) process.exit(0);
+            const body = [];
+            for (const l of lines.slice(i + 1)) {
+              if (l.startsWith("## ")) break;
+              if (l.trim() !== "" && !l.startsWith("###")) body.push(l.trim());
+            }
+            if (body.length) {
+              console.error("CHANGELOG.md has " + body.length + " unreleased line(s); cut a version before shipping");
+              console.error("  first: " + body[0].slice(0, 90));
+              process.exit(1);
+            }
+            console.log("[Unreleased] is empty");
+          '
 
       - name: Skill frontmatter
         run: |
@@ -114,6 +132,25 @@ jobs:
             if (bad.length) { for (const b of bad) console.error(b); process.exit(1); }
           '
 
+
+
+  suite:
+    name: suite (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [18, 22]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
       - name: The test suite passes, from three working directories
         run: |
           for d in . skills evals; do
@@ -175,3 +212,28 @@ jobs:
           if node skills/claude-code-route/scripts/route-lint.mjs "$D"; then
             echo "lint accepted a proof that was never executed"; exit 1
           fi
+
+  install:
+    name: install from the marketplace and run the installed suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Add the marketplace and install the plugin
+        run: |
+          claude plugin marketplace add "$GITHUB_REPOSITORY"
+          claude plugin install claude-code-route
+
+      - name: The installed copy runs its own suite
+        run: |
+          root=$(find "$HOME/.claude/plugins/cache" -type d -name claude-code-route -path '*cache*' | head -1)
+          plugin=$(find "$root" -maxdepth 2 -type f -name route-lint.test.mjs -printf '%h/..\n' | head -1)
+          test -n "$plugin" || { echo "installed copy has no test suite"; exit 1; }
+          cd "$plugin" && node tests/route-lint.test.mjs | tail -1

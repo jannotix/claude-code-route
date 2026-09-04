@@ -2,7 +2,7 @@
 //   node route-lint.test.mjs
 
 import { execFileSync, spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -220,6 +220,51 @@ const check = (name, ok, detail = '') => {
   const tampered = hist(['verify']);
   check('history verify detects an edited entry',
     tampered.code === 1 && tampered.out.includes('does not match its hash'), tampered.out);
+
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// The runtime floor is declared once and refuses clearly below it. A guard inside the module cannot
+// help under Node 14, where the module does not parse; this covers the range where it can.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'route-floor-'));
+  const probe = join(dir, 'probe.mjs');
+  writeFileSync(probe, [
+    "Object.defineProperty(process.versions, 'node', { value: '16.20.2', configurable: true });",
+    "await import(process.argv[2]);",
+  ].join('\n'), 'utf8');
+
+  const declared = readFileSync(join(here, '..', 'README.md'), 'utf8');
+  check('the README declares the floor the scripts enforce', /Node 18/.test(declared));
+
+  for (const name of ['route-lint', 'route-map', 'route-history']) {
+    const url = pathToFileURL(join(scripts, `${name}.mjs`)).href;
+    const r = run(probe, [url]);
+    check(`${name} refuses an older runtime by name, exit 2`,
+      r.code === 2 && r.err.includes('needs Node 18'), `exit ${r.code}: ${r.err.trim()}`);
+  }
+
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// The operator can decline to be recorded. The history is committed and often published, so the
+// identity it carries leaves the machine that wrote it.
+{
+  const dir = mkdtempSync(join(tmpdir(), 'route-history-id-'));
+  const log = join(dir, 'HISTORY.jsonl');
+  const base = ['append', '--file', log, '--model', 'm', '--operator', 'Test Person <t@example.com>'];
+
+  run(history, [...base, '--event', 'cycle.planned']);
+  run(history, [...base, '--event', 'cycle.executed', '--no-operator']);
+
+  const rows = readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+  check('an operator is recorded by default',
+    rows[0].actor.operator === 'Test Person <t@example.com>', JSON.stringify(rows[0].actor));
+  check('--no-operator omits the field entirely',
+    !('operator' in rows[1].actor), JSON.stringify(rows[1].actor));
+  check('the chain verifies with the field omitted',
+    run(history, ['verify', '--file', log]).code === 0);
 
   rmSync(dir, { recursive: true, force: true });
 }
@@ -568,6 +613,13 @@ src/
   check('a dotted symbol is one owner',
     !codes('INV-001  Something must always hold.  Owner: `Order.applyDiscount`')
       .includes('invariant-two-owners'));
+  // Found by writing the release plan: an owner that is a file path was refused, because the
+  // separator set matched a slash anywhere rather than a slash between words.
+  for (const path of ['.claude-plugin/plugin.json', 'src/billing/money.py']) {
+    check(`an owner of "${path}" is one owner`,
+      !codes(`INV-001  Something must always hold.  Owner: \`${path}\``)
+        .includes('invariant-two-owners'));
+  }
 
   rmSync(dir, { recursive: true, force: true });
 }
