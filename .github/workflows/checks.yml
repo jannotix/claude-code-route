@@ -6,6 +6,14 @@ on:
   push:
   pull_request:
 
+# Every job, not only the ones that pipe today. GitHub's default is `bash -e` with no pipefail, so
+# a step ending in a pipe reports the last command's status and a failing one passes the build. That
+# masked the installed-suite check in 1.1.0. Setting it here means a future step cannot regress into
+# it. (REQ-006)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   scripts:
     runs-on: ubuntu-latest
@@ -160,9 +168,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node: [18, 22, 24]
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -234,12 +239,6 @@ jobs:
   install:
     name: install from the marketplace and run the installed suite
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        # GitHub's default shell is `bash -e` with no pipefail, so a step ending in
-        # `| tail -1` reports tail's status and a failing suite passes the build. The
-        # `bash` shell is `-eo pipefail`. Found by the seventh adversarial round.
-        shell: bash
     steps:
       - uses: actions/checkout@v4
 
