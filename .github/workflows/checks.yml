@@ -207,7 +207,11 @@ jobs:
 
   install:
     name: install from the marketplace and run the installed suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -224,6 +228,7 @@ jobs:
           claude plugin install claude-code-route
 
       - name: The installed copy is the tree the default branch publishes
+        if: runner.os == 'Linux'
         run: |
           suite=$(find "$HOME/.claude/plugins/cache" -type f -name route-lint.test.mjs | head -1)
           test -n "$suite" || { echo "no installed copy found"; exit 1; }
@@ -258,6 +263,22 @@ jobs:
           test "$compared" -ge 20 || { echo "walked too few installed files to prove anything"; exit 1; }
           test "$published" -ge 20 || { echo "walked too few published files to prove anything"; exit 1; }
           test "$differ" -eq 0 || { echo "the installed copy is not the published tree"; exit 1; }
+        env:
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+
+      - name: Claude Code loads the plugin it installed
+        run: |
+          git fetch --depth 1 origin "$GITHUB_DEFAULT_BRANCH"
+          git show "FETCH_HEAD:.claude-plugin/plugin.json" > published-manifest.json
+          want=$(node -p "require('./published-manifest.json').version")
+          rm published-manifest.json
+          claude plugin details claude-code-route > details.txt || { cat details.txt; exit 1; }
+          cat details.txt
+          # Files landing on disk is not the plugin working. This is the CLI resolving the manifest,
+          # reporting the version the default branch publishes, and listing the skill as loadable.
+          grep -q "Skills (1)  claude-code-route" details.txt || { echo "the CLI does not list the skill"; exit 1; }
+          grep -q "(claude-code-route) $want" details.txt || { echo "the CLI reports a version that is not $want"; exit 1; }
+          rm details.txt
         env:
           GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 

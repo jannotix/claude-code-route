@@ -50,7 +50,8 @@ REQ-005  Continuous integration must exercise every operating system the plugin 
 REQ-006  A release must be proven by installing it, not by inspecting it.
   AC-006.1  Given a clean environment When the marketplace is added and the plugin installed by the commands the README gives Then the install succeeds
   AC-006.2  Given that installed copy When its own test suite is run from the installed path Then it passes
-  AC-006.3  Given AC-006.1 and AC-006.2 When CI runs Then both are executed there, not only by hand
+  AC-006.3  Given AC-006.1 and AC-006.2 When CI runs Then both are executed there, not only by hand, on each operating system the README claims rather than on one
+  AC-006.4  Given the installed plugin When `claude plugin details claude-code-route` is run Then the CLI lists one skill by name and reports the version the default branch publishes. Files landing on disk is not the plugin working, and until this criterion existed nothing distinguished the two
 
 REQ-007  Every top-level directory in the published tree must have a stated reason to be there.
   AC-007.1  Given `docs/route/` in the published tree When a reader opens it Then a README in that directory says what it is and why it ships
@@ -78,7 +79,7 @@ NFR-002  Install cost: a first install and its verification complete in under 5 
 | REQ-003 | Nothing user-visible ships without a version heading | `.github/changelog-gate.mjs`, called by the workflow and exercised by the suite | release |
 | REQ-004 | The runtime floor is declared at each script's entry, in `README.md` and in the manifest's `engines.node`, and the five declarations are asserted equal | each script's preamble, `README.md`, `.claude-plugin/plugin.json`, checked by `tests/route-lint.test.mjs` | release |
 | REQ-005 | The matrix covers the platforms the README claims | `.github/workflows/checks.yml` | release |
-| REQ-006 | A release is proven by installing it | `.github/workflows/checks.yml` | release |
+| REQ-006 | A release is proven by installing it, and by the CLI loading what was installed | `.github/workflows/checks.yml`, the install job's matrix | release |
 | REQ-007 | Every top-level published directory declares its purpose | a `README.md` in each of `.claude-plugin/`, `.github/`, `docs/`, `evals/`, `skills/` and `tests/`, plus `docs/route/README.md`, reported by `.github/published-dirs.mjs`, which the workflow calls | release |
 | NFR-001 | Zero errors, and every warning ruled on in writing | this plan's Adjudicated warnings section | release |
 | NFR-002 | The install proof is cheap enough to always run | `.github/workflows/checks.yml` | release |
