@@ -12,7 +12,8 @@ const UNPUBLISHED = new Set(['.git', 'node_modules']);
 
 export function publishedDirs(root) {
   try {
-    const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' });
+    const tracked = execFileSync('git', ['ls-files'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
     const dirs = new Set();
     for (const f of tracked.split('\n')) {
       const i = f.indexOf('/');

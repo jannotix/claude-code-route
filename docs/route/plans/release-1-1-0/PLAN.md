@@ -225,15 +225,15 @@ reproducible by anyone holding the commit.
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | `$ gh run view 33930561278` — the install job hashed 51 installed files against the default branch and none differed or was absent; and `$ git rev-list --count claude-code-route--v1.1.2..main` returns 0 at the tag | pass |
+| REQ-001 | `$ gh run view 33932657547` — the install job hashed 53 installed files against the default branch and walked 53 published files back the other way; none differed and none was missing from either side | pass |
 | REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
 | REQ-003 | `node tests/route-lint.test.mjs` — six checks import `.github/changelog-gate.mjs`, the file the workflow calls, and run it both ways: exit 1 naming the first unreleased line, exit 0 once that entry sits under a version heading. Gutting the gate to return nothing fails two of them | pass |
-| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the three declarations, the README and `engines.node` are asserted equal, and setting `engines.node` to `>=20.0.0` fails that check | pass |
-| REQ-005 | `$ gh run view 33930561278` — nine matrix jobs green across Linux, macOS and Windows at Node 18, 22 and 24 | pass |
-| REQ-006 | `$ gh run view 33930561278` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
+| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run view 33932657547` runs the suite at 18.0.0 on all three platforms | pass |
+| REQ-005 | `$ gh run view 33932657547` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | AC-005.1 and AC-005.3 pass; **AC-005.2 open** |
+| REQ-006 | `$ gh run view 33932657547` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
 | REQ-007 | `node tests/route-lint.test.mjs` — six checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
-| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — over the whole published tree, which is what the marketplace ships: 0 errors, and the Adjudicated warnings section rules on all 14 it reports | pass |
-| NFR-002 | `$ gh run view 33930561278` — install job start to finish, 26 seconds against a budget of 300 | pass |
+| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — 0 errors and the 14 warnings the Adjudicated section rules on. The walker skips dot-prefixed entries, so `$ node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 .github --layers domain,application,release` covers the two gate modules the first pass cannot reach: 0 errors, 0 warnings | pass |
+| NFR-002 | `$ gh run view 33932657547` — install job start to finish, 26 seconds against a budget of 300 | pass |
 
 **What the matrix found on its first run, which is why REQ-005 exists.** Six jobs, and two failed:
 macOS at both Node versions, on the step that proves the history detects an edited entry. `sed -i`
@@ -365,6 +365,40 @@ that exists only in a transcript is the thing this skill exists to refuse.
 **8.2 is the first refuted finding in eight rounds.** Its verification step, run unchanged, returns
 no match: the scanner's fence is anchored and a three-backtick opening is not closed by two. The
 reviewer's own probe, visible in its transcript, had already returned `accepted: false` twice.
+
+## Round 9 — the round-8 repairs, before the tag
+
+Ran 2026-09-05 over `claude-code-route--v1.1.1..a7a9bdf`, the repair and nothing else, with the
+evidence taken from that revision's own CI run. **Nine findings, nine confirmed by executing their
+verification steps.** Three were BLOCKER.
+
+This is the first round in the project's history to run while its subject was still a candidate.
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 9.1 | WRONG-PLAN | BLOCKER | There is no reviewed 1.1.2 artifact to tag, and REQ-001's row already claimed its ancestry | confirmed: three commits past the tag, `plugin.json` and `CHANGELOG.md` unchanged, and `git rev-list ...v1.1.2..main` exits 128 | AC-001.6 states what the tagged commit may differ by; the row no longer claims a tag that does not exist |
+| 9.2 | DEFECT | BLOCKER | The artifact comparison walked one way | confirmed: a file dropped from a simulated install left `differ=0` while 50 others remained | both sides walked, 53 against 53 with a floor on each |
+| 9.3 | DEFECT | MAJOR | The directory check skipped what ships | confirmed: `.claude-plugin` and `.github` are tracked and the install carried all 51 files; and an indented heading counted as 60 characters of prose | published means tracked and git is asked; a heading is a heading at any indentation; both directories now state their purpose |
+| 9.4 | UNPROVEN | BLOCKER | The proof rows cited a run that was not the candidate's | confirmed: rows cited `33930561278`, the receipt cited `33930715990` | every row cites `33932657547`, the run at the reviewed revision |
+| 9.5 | UNPROVEN | MAJOR | The floor assertions matched digits, not declarations | confirmed by execution: `<=18` passed, and so did a README reading "Node 18 is unsupported; use Node 20" | both match the exact declaration, and both counterexamples fail |
+| 9.6 | UNPROVEN | MAJOR | Node 18.0.0 was never run | confirmed: the matrix named the selector `18`, which resolves to the newest 18.x | the matrix names `18.0.0` too, green on all three platforms |
+| 9.7 | UNPROVEN | MAJOR | REQ-005 was marked pass while AC-005.2 admits it cannot be | confirmed by reading the row against the criterion | the row closes AC-005.1 and AC-005.3 and marks AC-005.2 open |
+| 9.8 | UNPROVEN | MAJOR | The scan of "the whole published tree" skipped `.github` | confirmed: the walker skips dot-prefixed entries, and the patch had just added two `.mjs` files there | the proof runs both paths; the second reports 0 and 0 |
+| 9.9 | MISPLACED | MAJOR | Three placements omitted homes the repairs created or relied on | confirmed by reading the table against the files | REQ-001, REQ-004 and REQ-007 name what they actually own |
+
+**9.1 is the shape of the problem, not a slip in it.** Every repair creates content the last round did
+not see, so a rule of "tag only what was reviewed" never terminates on its own. AC-001.6 ends the
+regress by bounding what the tagged commit may add: the version, the changelog and this plan's proof
+rows, nothing else. What CI proved at the reviewed commit is then what the tag carries.
+
+**9.4 is round 7's finding 7.15 returning on the author rather than the reviewer.** The proof rows
+were updated to a CI run, the candidate then moved, and the rows kept pointing at the older run. A
+freeze takes its evidence from the revision under review, and a revision that moves takes its
+evidence with it.
+
+**9.2 and the counting fix before it are the same defect twice.** The comparison was written, found
+to pass without comparing, given a count — and the count only proved one side of it. A check that
+walks a set and reports agreement proves nothing about what is not in that set.
 
 ## Verdict
 
