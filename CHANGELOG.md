@@ -6,6 +6,55 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-09-05
+
+Three adversarial rounds, run in one sitting against 1.1.1 and against each repair of it in turn.
+**Twenty-seven findings, twenty-six confirmed by executing their verification steps and one refuted
+by its own.** Eleven were BLOCKER. This is the first release in the project reviewed *before* its tag
+rather than after.
+
+### Fixed
+
+- **The default branch carried a second tree named 1.1.1.** The marketplace serves the default
+  branch, so for six commits every install received a tree calling itself a version it was not. Work
+  that is not a release now belongs on a branch; every commit on the default branch is a publication.
+- **The comparison between the installed copy and the published tree walked one way**, so a file
+  missing from the install was invisible while twenty others remained. It walks both sides and
+  reports the count on each. Before that it had no count at all, and a walk that found nothing passed
+  by construction.
+- **The install proof ran on one operating system out of the three the README claims.** It is a
+  matrix of three, and a new step runs `claude plugin details`, which makes the CLI resolve the
+  manifest and list the skill by name at the published version. Files landing on disk is not the
+  plugin working, and until now nothing distinguished the two.
+- **The published-directory check skipped every dot-directory** while `.claude-plugin` and `.github`
+  ship, counted an indented heading as prose, and accepted an empty README. Published means tracked
+  and git is asked; a heading is a heading at any indentation; both directories say what they are.
+- **The changelog gate and the directory check lived inline in the workflow**, where the only way to
+  exercise them was to push. Both are modules the workflow calls and the suite runs both ways.
+- **Nothing read `engines.node`.** Set to `>=20.0.0` against scripts enforcing 18, the suite reported
+  every check green. The five declarations of the floor are asserted equal against exact strings, and
+  `<=18` and a README reading "Node 18 is unsupported; use Node 20" both fail.
+- **Node 18.0.0 had never been run.** The matrix asked for the selector `18`, which resolves to the
+  newest 18.x, while the criterion asked for the floor exactly. Both are in the matrix.
+- Two plan files carried a `0x08` byte where a backtick belonged.
+
+### Changed
+
+- **A release is now prepared in one order and only one.** The version and the changelog are cut
+  first, the adversarial round reviews that exact commit, and the tag points at that same SHA. What a
+  release produces about itself — the verdict, the CI run, the history entry authorising the tag —
+  cannot be written into the commit being tagged, and lands in the next release instead. Three
+  separate rounds found the same defect underneath: a document citing the CI run of its own commit
+  cannot be right, because the run happens after the commit. Proof rows name a command that resolves
+  against the tag rather than an identifier minted afterwards.
+- **A release depends on every acceptance criterion being closed by execution or waived in writing.**
+  There is one waiver, recorded in the plan: the Windows lock regression is detected probabilistically
+  on a race measured at about one writer in 250, and no green matrix proves it would be caught.
+- Criteria that promised more than was built now say what is true: the runtime guard speaks from Node
+  14.13.1 upward, measured, because below that the `node:` specifiers are resolved before any
+  statement in the file executes; and the directory check reads the top level, which it says.
+
+
 ## [1.1.1] - 2026-09-04
 
 The seventh adversarial round, run against 1.1.0 after it was published, found seventeen things. Six

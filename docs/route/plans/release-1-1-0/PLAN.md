@@ -25,7 +25,8 @@ REQ-001  A version string must identify exactly one artifact.
   AC-001.4  Given the commit that bumps `.claude-plugin/plugin.json` When the tag for that version is cut Then it points at that same commit, so no commit ever declares a version whose tag does not exist. 1.1.0 spent four commits in that window and 1.1.1 spent two; the window is closed by ordering, not by declaring it
   AC-001.3  Given a bug report naming a version When the maintainer checks out that tag Then the behaviour the reporter saw is reproducible from it
   AC-001.5  Given the copy the marketplace installs When every file it carries is hashed against the same path on the default branch, and every published file is looked for in the installation Then no file differs and none is missing from either side, and CI performs this comparison rather than a reader
-  AC-001.6  Given the tagged commit and the last commit an adversarial round reviewed When the diff between them is taken Then it touches only `.claude-plugin/plugin.json`, `CHANGELOG.md` and this plan's proof rows, so the tag carries the content that was reviewed and the version that names it
+  AC-001.6  Given a release When it is prepared Then the version and the changelog are cut first, the adversarial round reviews that exact commit, and the tag points at that same SHA with nothing between them. Nothing that a release produces about itself -- the round's verdict, the CI run identifier, the history entry authorising the tag -- may be written into the commit being tagged, because a commit cannot contain a record of what happened after it was written. Those receipts land in the next release, and a proof row therefore names a command that resolves against the tag rather than an identifier minted afterwards
+  AC-001.7  Given the marketplace, which serves the default branch rather than a tag When a commit lands on the default branch Then it is a release commit. Work that is not a release belongs on a branch, where CI still runs it; every push to the default branch is a publication, and the six commits that carried version 1.1.1 while differing from its tag were six unintended ones
 
 REQ-002  The published tree must not carry an operator's identity unless publishing it is a recorded decision.
   AC-002.1  Given the versioned tree When it is searched for the operator's address Then either no match is found, or `docs/route/README.md` states that the history is published with attribution on purpose
@@ -125,7 +126,7 @@ INV-002  The history chain verifies, and any deliberate rewrite of it is recorde
 
 ## Scope
 
-    .claude-plugin/plugin.json, .github/**, CHANGELOG.md, README.md, SECURITY.md, docs/**, skills/README.md, skills/claude-code-route/scripts/**, tests/**
+    .claude-plugin/**, .github/**, CHANGELOG.md, README.md, SECURITY.md, docs/**, skills/README.md, skills/claude-code-route/scripts/**, tests/**
 
 ## Out of scope
 
@@ -175,7 +176,7 @@ execution round, 2026-09-04.
 | T8 — adjudicate the 14 gate warnings in writing | NFR-001 | **done** — see Adjudicated warnings |
 | T9 — close `[Unreleased]` as 1.1.0, bump the manifest | REQ-003, REQ-001 | **done** — manifest at 1.1.0 |
 | T11 — adversarial round over the candidate | — | T1..T9, **before T10** |
-| T10 — tag and release, notes describing this code | REQ-001 | T11 |
+| T10 — tag and release, notes describing this code | REQ-001 | T11, and every acceptance criterion either closed by execution or waived in writing below |
 
 ## Deviations
 
@@ -226,15 +227,15 @@ reproducible by anyone holding the commit.
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | `$ gh run view 33932657547` — the install job hashed 53 installed files against the default branch and walked 53 published files back the other way; none differed and none was missing from either side | pass |
+| REQ-001 | `$ gh run list --commit claude-code-route--v1.1.2 --json name,conclusion` — the install job hashed every installed file against the default branch and walked every published file back the other way; none differed and none was missing from either side | pass |
 | REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
 | REQ-003 | `node tests/route-lint.test.mjs` — six checks import `.github/changelog-gate.mjs`, the file the workflow calls, and run it both ways: exit 1 naming the first unreleased line, exit 0 once that entry sits under a version heading. Gutting the gate to return nothing fails two of them | pass |
-| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run view 33932657547` runs the suite at 18.0.0 on all three platforms | pass |
-| REQ-005 | `$ gh run view 33932657547` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | AC-005.1 and AC-005.3 pass; **AC-005.2 open** |
-| REQ-006 | `$ gh run view 33932657547` — the install job added the marketplace, installed the plugin, and ran the installed copy's suite | pass |
+| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run list --commit claude-code-route--v1.1.2 --json name,conclusion` runs the suite at 18.0.0 on all three platforms | pass |
+| REQ-005 | `$ gh run list --commit claude-code-route--v1.1.2 --json name,conclusion` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | AC-005.1 and AC-005.3 pass; **AC-005.2 waived, see Waivers** |
+| REQ-006 | `$ gh run list --commit claude-code-route--v1.1.2 --json name,conclusion` — on each of the three operating systems the install job added the marketplace, installed the plugin, ran `claude plugin details` and found one skill by name at the published version, then ran the installed copy's suite | pass |
 | REQ-007 | `node tests/route-lint.test.mjs` — six checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
-| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — 0 errors and the 14 warnings the Adjudicated section rules on. The walker skips dot-prefixed entries, so `$ node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 .github --layers domain,application,release` covers the two gate modules the first pass cannot reach: 0 errors, 0 warnings | pass |
-| NFR-002 | `$ gh run view 33932657547` — install job start to finish, 26 seconds against a budget of 300 | pass |
+| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — 0 errors and the 14 warnings the Adjudicated section rules on. The walker skips dot-prefixed entries, so `$ node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 .github .claude-plugin --layers domain,application,release` covers the two gate modules and the manifests the first pass cannot reach: 0 errors, 0 warnings | pass |
+| NFR-002 | `$ gh run list --commit claude-code-route--v1.1.2 --json name,conclusion` — the install job start to finish, under the budget of 300 seconds; 26 seconds when it was last measured | pass |
 
 **What the matrix found on its first run, which is why REQ-005 exists.** Six jobs, and two failed:
 macOS at both Node versions, on the step that proves the history detects an edited entry. `sed -i`
@@ -266,6 +267,19 @@ rather than raced against, and that is a change to `route-history` this release 
 
 **The round-6 repairs to the linter and the round-8 repairs to the capability fixture have not been
 attacked.** They are not part of this plan and do not block a release, but a release ships them.
+
+## Waivers
+
+A criterion here is closed by execution or it is waived in writing, and T10 depends on that being
+true of every one of them. There is one waiver.
+
+**AC-005.2 — the Windows lock regression is not detected deterministically.** Round 6 measured the
+race at about one writer in 250. The suite asserts that no writer failed outside the contract, which
+holds on every run the race does not occur, so twelve green matrix jobs are consistent with the
+defect being present. Closing it needs the lock acquisition given an injected fault rather than a
+raced one, which is a change to `route-history` that no requirement in this plan asks for. The
+release ships with the regression undetected by construction rather than by oversight, and this
+sentence is the record of that decision.
 
 ## Round 7 — the release, and the linter it ships
 
@@ -380,7 +394,7 @@ This is the first round in the project's history to run while its subject was st
 | 9.1 | WRONG-PLAN | BLOCKER | There is no reviewed 1.1.2 artifact to tag, and REQ-001's row already claimed its ancestry | confirmed: three commits past the tag, `plugin.json` and `CHANGELOG.md` unchanged, and `git rev-list ...v1.1.2..main` exits 128 | AC-001.6 states what the tagged commit may differ by; the row no longer claims a tag that does not exist |
 | 9.2 | DEFECT | BLOCKER | The artifact comparison walked one way | confirmed: a file dropped from a simulated install left `differ=0` while 50 others remained | both sides walked, 53 against 53 with a floor on each |
 | 9.3 | DEFECT | MAJOR | The directory check skipped what ships | confirmed: `.claude-plugin` and `.github` are tracked and the install carried all 51 files; and an indented heading counted as 60 characters of prose | published means tracked and git is asked; a heading is a heading at any indentation; both directories now state their purpose |
-| 9.4 | UNPROVEN | BLOCKER | The proof rows cited a run that was not the candidate's | confirmed: rows cited `33930561278`, the receipt cited `33930715990` | every row cites `33932657547`, the run at the reviewed revision |
+| 9.4 | UNPROVEN | BLOCKER | The proof rows cited a run that was not the candidate's | confirmed: rows cited `33930561278`, the receipt cited `33930715990` | repaired wrongly: the rows were pointed at a run of the revision then under review, and the candidate moved again. Round 10 found the same defect a third time; the rows now name a command that resolves against the tag rather than an identifier minted after the commit |
 | 9.5 | UNPROVEN | MAJOR | The floor assertions matched digits, not declarations | confirmed by execution: `<=18` passed, and so did a README reading "Node 18 is unsupported; use Node 20" | both match the exact declaration, and both counterexamples fail |
 | 9.6 | UNPROVEN | MAJOR | Node 18.0.0 was never run | confirmed: the matrix named the selector `18`, which resolves to the newest 18.x | the matrix names `18.0.0` too, green on all three platforms |
 | 9.7 | UNPROVEN | MAJOR | REQ-005 was marked pass while AC-005.2 admits it cannot be | confirmed by reading the row against the criterion | the row closes AC-005.1 and AC-005.3 and marks AC-005.2 open |
@@ -400,6 +414,41 @@ evidence with it.
 **9.2 and the counting fix before it are the same defect twice.** The comparison was written, found
 to pass without comparing, given a count — and the count only proved one side of it. A check that
 walks a set and reports agreement proves nothing about what is not in that set.
+
+## Round 10 — the round-9 repairs, and the scheme meant to end the regress
+
+Ran 2026-09-05 over `a7a9bdf..00fc38a`. **Eight findings, eight confirmed by executing their
+verification steps.** Five were BLOCKER, and the reviewer was right about the one that mattered most:
+the scheme written to close the review-and-tag regress did not close it.
+
+| # | Class | Severity | Summary | Verified | Outcome |
+| --- | --- | --- | --- | --- | --- |
+| 10.1 | DEFECT | BLOCKER | The default branch carried a second tree named 1.1.1 | confirmed: six commits past the tag, both manifests reading 1.1.1, and the marketplace serves the branch | AC-001.7 states that every commit on the default branch is a publication; closed by cutting this version |
+| 10.2 | UNPROVEN | BLOCKER | The proof rows cited a run that was not the candidate's, a third time | confirmed: `33932657547` six times, `33932948856` none | the rows name a command resolving against the tag; no identifier minted after the commit appears in it |
+| 10.3 | DEFECT | BLOCKER | The round-9 history entry recorded the repair as the reviewed revision | confirmed: entry 30 carries `011a88e` where the round reviewed `a7a9bdf` | corrected by a later entry, the only way an append-only log can be corrected |
+| 10.4 | WRONG-PLAN | BLOCKER | AC-001.6 did not close the regress | confirmed: recording the review that authorises the tag is itself a change to the tree being tagged, and no command enforced the criterion | rewritten: the version is cut first, the round reviews that SHA, the tag points at it, and what a release produces about itself lands in the next one |
+| 10.5 | WRONG-PLAN | BLOCKER | T10 depended on T11 alone, so a criterion could stay open and ship | confirmed by reading the task table | T10 depends on every criterion being closed or waived, and the Waivers section exists |
+| 10.6 | UNPROVEN | MAJOR | The published-tree scan reached neither `.github` nor `.claude-plugin` | confirmed: the walker skips dot-prefixed entries and `.claude-plugin` scans 0 and 0 | the proof row names all three paths |
+| 10.7 | SCOPE | MAJOR | `.claude-plugin/README.md` landed outside the declared scope | confirmed: the scope permitted `plugin.json` alone | scope widened to the directory the placement already required |
+| 10.8 | DEFECT | MINOR | A README contradicted the directory it described | confirmed: "two manifests and nothing else" against three tracked files | corrected |
+
+**10.4 is the finding this round existed to produce.** AC-001.6 tried to bound what a tagged commit
+may add. The bound could not hold, because a release produces facts about itself -- a verdict, a CI
+run, a history entry -- that did not exist when the commit was written. The correction is not a
+tighter bound but a different order: cut the version, review that commit, tag it, and let the
+receipts land in the next release. A tag does not contain the record of its own review, and asking it
+to was the mistake.
+
+**10.1 had been live for six commits.** Repairs were pushed to the default branch while the manifest
+still read 1.1.1, and the marketplace serves the default branch, so every install during that window
+received a tree calling itself a version it was not. The rule that prevents it is AC-001.7 and it is
+about where work happens, not about care taken: the default branch is a publication channel, so work
+that is not a release belongs on a branch.
+
+**10.2 is 7.15 and 9.4 in the same clothes.** Three rounds, one defect: a document citing the CI run
+of its own commit cannot be right, because the run happens after the commit. Discipline had been
+applied to it twice and failed twice; what fixes it is that the citation no longer names an
+identifier at all.
 
 ## Verdict
 

@@ -1,6 +1,6 @@
 # .claude-plugin
 
-Two manifests the Claude Code marketplace reads, and nothing else.
+The two manifests the Claude Code marketplace reads, and this note about them.
 
 `plugin.json` names the plugin, its version, the runtime floor its scripts require, and the eval
 suite. `marketplace.json` is what `claude plugin marketplace add` fetches to find the plugin at all.
