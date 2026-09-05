@@ -274,13 +274,15 @@ const check = (name, ok, detail = '') => {
     new Set(floors).size === 1 && floors[0] === '18', floors.join());
 
   const declared = readFileSync(join(here, '..', 'README.md'), 'utf8');
-  check('the README declares the floor the scripts enforce', /Node 18/.test(declared));
+  check('the README declares the floor the scripts enforce',
+    declared.includes(`Requires **Node ${floors[0]} or newer**`),
+    'README.md does not carry the floor as a requirement');
 
   // Round 8: the manifest is the fifth declaration and nothing read it. Set to >=20.0.0 against
   // scripts enforcing 18, the suite still reported 158/158. (REQ-004, AC-004.1)
   const engines = JSON.parse(readFileSync(join(here, '..', '.claude-plugin', 'plugin.json'), 'utf8')).engines?.node ?? '';
   check('the manifest declares the floor the scripts enforce',
-    (engines.match(/(\d+)/) || [])[1] === floors[0], `engines.node ${engines} against ${floors[0]}`);
+    engines === `>=${floors[0]}.0.0`, `engines.node ${engines} against ${floors[0]}`);
 
   for (const name of ['route-lint', 'route-map', 'route-history']) {
     const url = pathToFileURL(join(scripts, `${name}.mjs`)).href;
@@ -775,39 +777,61 @@ src/
   rmSync(dir, { recursive: true, force: true });
 }
 
-// Round 8: the release check tested that a README existed. Three empty ones and an undocumented
-// directory passed it with exit 0, and AC-007.2 asks for a stated purpose. (REQ-007, AC-007.2)
+// Round 8: the release check tested that a README existed. Three empty ones passed it with exit 0,
+// and AC-007.2 asks for a stated purpose. Round 9: it skipped every dot-directory while
+// `.claude-plugin` and `.github` ship, and counted an indented heading as prose. (REQ-007, AC-007.2)
 {
   const check_script = join(here, '..', '.github', 'published-dirs.mjs');
-  const { undocumented } = await import(pathToFileURL(check_script).href);
+  const { undocumented, publishedDirs } = await import(pathToFileURL(check_script).href);
   const NL = String.fromCharCode(10);
 
   const dir = mkdtempSync(join(tmpdir(), 'route-dirs-'));
-  for (const d of ['docs', 'skills', 'tests']) mkdirSync(join(dir, d), { recursive: true });
-  mkdirSync(join(dir, '.github'), { recursive: true });
+  for (const d of ['docs', 'skills', 'tests', 'headings', '.github', '.git']) {
+    mkdirSync(join(dir, d), { recursive: true });
+  }
   writeFileSync(join(dir, 'docs', 'README.md'), '', 'utf8');
   writeFileSync(join(dir, 'skills', 'README.md'), ['# Skills', '', '## What'].join(NL), 'utf8');
+  writeFileSync(join(dir, 'headings', 'README.md'),
+    ['# Heading', '', '  ## An indented heading long enough to pass a floor of forty characters'].join(NL), 'utf8');
   writeFileSync(join(dir, 'tests', 'README.md'),
     'The suite that proves the scripts, shipped so the commit carries its own evidence.', 'utf8');
+  writeFileSync(join(dir, '.github', 'README.md'),
+    'The checks that run on every push, and the two gates they call from the workflow.', 'utf8');
 
   const bad = undocumented(dir);
   check('an empty README does not state a purpose',
     bad.some((b) => b.dir === 'docs' && b.prose === 0), JSON.stringify(bad));
   check('headings alone do not state a purpose',
     bad.some((b) => b.dir === 'skills'), JSON.stringify(bad));
-  check('prose past the floor does', !bad.some((b) => b.dir === 'tests'), JSON.stringify(bad));
-  check('a dot directory is not published', !bad.some((b) => b.dir === '.github'), JSON.stringify(bad));
+  check('an indented heading is a heading, not prose',
+    bad.some((b) => b.dir === 'headings'), JSON.stringify(bad));
+  check('prose past the floor does state one', !bad.some((b) => b.dir === 'tests'), JSON.stringify(bad));
+  check('a dot directory that ships is checked like any other',
+    publishedDirs(dir).includes('.github') && !bad.some((b) => b.dir === '.github'),
+    publishedDirs(dir).join());
+  check('the bookkeeping git keeps for itself is not a published directory',
+    !publishedDirs(dir).includes('.git'), publishedDirs(dir).join());
 
   const r = run(check_script, [dir]);
   check('the check exits 1 and names every directory that failed',
-    r.code === 1 && r.err.includes('docs:') && r.err.includes('skills:'), `exit ${r.code}: ${r.err.trim()}`);
+    r.code === 1 && r.err.includes('docs:') && r.err.includes('skills:') && r.err.includes('headings:'),
+    `exit ${r.code}: ${r.err.trim()}`);
 
   writeFileSync(join(dir, 'docs', 'README.md'),
     'What ships here and why: the cycle artifacts this repository keeps in public.', 'utf8');
   writeFileSync(join(dir, 'skills', 'README.md'),
     ['# Skills', '', 'The one skill this plugin installs, and the scripts it resolves at run time.'].join(NL), 'utf8');
+  writeFileSync(join(dir, 'headings', 'README.md'),
+    'A directory that says what it is in a sentence rather than in another heading.', 'utf8');
   const ok = run(check_script, [dir]);
   check('the check exits 0 once every directory states one', ok.code === 0, `exit ${ok.code}: ${ok.err.trim()}`);
+
+  // The authority on what ships is git, not the filesystem: `.route` is ignored and reaches nobody.
+  check('the published tree is the tracked tree',
+    publishedDirs(join(here, '..')).includes('.github')
+      && !publishedDirs(join(here, '..')).includes('.route'),
+    publishedDirs(join(here, '..')).join());
+
   rmSync(dir, { recursive: true, force: true });
 }
 

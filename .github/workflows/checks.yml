@@ -136,7 +136,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [18, 22, 24]
+        node: ['18.0.0', 18, 22, 24]
     steps:
       - uses: actions/checkout@v4
 
@@ -244,10 +244,19 @@ jobs:
               differ=1
             fi
           done < <(find "$root" -type f -not -path '*/.git/*')
-          echo "compared $compared files against $GITHUB_DEFAULT_BRANCH"
+          published=0
+          while IFS= read -r rel; do
+            published=$((published + 1))
+            if [ ! -f "$root/$rel" ]; then
+              echo "published but not installed: $rel"
+              differ=1
+            fi
+          done < <(git ls-tree -r --name-only FETCH_HEAD)
+          echo "compared $compared installed files against $published published on $GITHUB_DEFAULT_BRANCH"
           # A walk that finds nothing leaves differ at 0, which is how a comparison passes without
-          # comparing. The tag carried 49 files; the floor catches an empty walk, not a count.
-          test "$compared" -ge 20 || { echo "compared too few files to prove anything"; exit 1; }
+          # comparing. The floor catches an empty walk on either side, not a count.
+          test "$compared" -ge 20 || { echo "walked too few installed files to prove anything"; exit 1; }
+          test "$published" -ge 20 || { echo "walked too few published files to prove anything"; exit 1; }
           test "$differ" -eq 0 || { echo "the installed copy is not the published tree"; exit 1; }
         env:
           GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}

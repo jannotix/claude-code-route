@@ -24,7 +24,8 @@ REQ-001  A version string must identify exactly one artifact.
   AC-001.2  Given a release tag When `git rev-list --count <tag>..main` is run Then it prints 0, or the difference is itself a released version
   AC-001.4  Given the commit that bumps `.claude-plugin/plugin.json` When the tag for that version is cut Then it points at that same commit, so no commit ever declares a version whose tag does not exist. 1.1.0 spent four commits in that window and 1.1.1 spent two; the window is closed by ordering, not by declaring it
   AC-001.3  Given a bug report naming a version When the maintainer checks out that tag Then the behaviour the reporter saw is reproducible from it
-  AC-001.5  Given the copy the marketplace installs When every file it carries is hashed against the same path on the default branch Then no file differs and none is absent, and CI performs this comparison rather than a reader
+  AC-001.5  Given the copy the marketplace installs When every file it carries is hashed against the same path on the default branch, and every published file is looked for in the installation Then no file differs and none is missing from either side, and CI performs this comparison rather than a reader
+  AC-001.6  Given the tagged commit and the last commit an adversarial round reviewed When the diff between them is taken Then it touches only `.claude-plugin/plugin.json`, `CHANGELOG.md` and this plan's proof rows, so the tag carries the content that was reviewed and the version that names it
 
 REQ-002  The published tree must not carry an operator's identity unless publishing it is a recorded decision.
   AC-002.1  Given the versioned tree When it is searched for the operator's address Then either no match is found, or `docs/route/README.md` states that the history is published with attribution on purpose
@@ -39,7 +40,7 @@ REQ-003  A release must leave no user-visible change unversioned.
 REQ-004  The runtime the scripts require must be declared and must fail clearly below it.
   AC-004.1  Given the README, the plugin manifest and the three scripts When the required Node version is read from each Then all five state the same floor, asserted by the suite and not by a reader
   AC-004.2  Given a Node from 14.13.1 to the floor When any of the three scripts is run Then it exits 2 with a message naming the required version, measured at 14.13.1 and 16.20.2. Below 14.13.1 the `node:` specifiers are resolved before any statement in the file executes and the run ends with `ERR_UNSUPPORTED_ESM_URL_SCHEME` at exit 1, measured at 14.13.0; below 14 the optional-chaining is a syntax error. Both are limits of a guard living inside the file it guards, and the criterion claims neither
-  AC-004.3  Given a Node at the floor exactly When the test suite is run Then it passes
+  AC-004.3  Given Node 18.0.0, the floor exactly rather than the newest 18.x the selector `18` resolves to When the test suite is run Then it passes, and the matrix names both
 
 REQ-005  Continuous integration must exercise every operating system the plugin is documented to support.
   AC-005.1  Given the CI workflow When its matrix is read Then it includes Linux, macOS and Windows
@@ -72,13 +73,13 @@ NFR-002  Install cost: a first install and its verification complete in under 5 
 
 | REQ | Rule | Home | Layer |
 | --- | --- | --- | --- |
-| REQ-001 | A version names one tree; the tag and the installed artifact agree | `.claude-plugin/plugin.json` with the release tag | release |
+| REQ-001 | A version names one tree; the tag and the installed artifact agree | `.claude-plugin/plugin.json` with the release tag, enforced by the install job's two-way comparison in `.github/workflows/checks.yml` | release |
 | REQ-002 | Identity is recorded only when recording it was decided | `route-history.mjs` for the switch, `docs/route/README.md` for the decision | release |
 | REQ-003 | Nothing user-visible ships without a version heading | `.github/changelog-gate.mjs`, called by the workflow and exercised by the suite | release |
-| REQ-004 | The runtime floor is declared at each script's entry, and the three declarations are asserted equal | each script's preamble, checked by `tests/route-lint.test.mjs` | release |
+| REQ-004 | The runtime floor is declared at each script's entry, in `README.md` and in the manifest's `engines.node`, and the five declarations are asserted equal | each script's preamble, `README.md`, `.claude-plugin/plugin.json`, checked by `tests/route-lint.test.mjs` | release |
 | REQ-005 | The matrix covers the platforms the README claims | `.github/workflows/checks.yml` | release |
 | REQ-006 | A release is proven by installing it | `.github/workflows/checks.yml` | release |
-| REQ-007 | Every top-level published directory declares its purpose | `docs/README.md`, `skills/README.md`, `tests/README.md` and `docs/route/README.md`, reported by `.github/published-dirs.mjs`, which the workflow calls | release |
+| REQ-007 | Every top-level published directory declares its purpose | a `README.md` in each of `.claude-plugin/`, `.github/`, `docs/`, `evals/`, `skills/` and `tests/`, plus `docs/route/README.md`, reported by `.github/published-dirs.mjs`, which the workflow calls | release |
 | NFR-001 | Zero errors, and every warning ruled on in writing | this plan's Adjudicated warnings section | release |
 | NFR-002 | The install proof is cheap enough to always run | `.github/workflows/checks.yml` | release |
 
