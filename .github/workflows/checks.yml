@@ -206,8 +206,12 @@ jobs:
           fi
 
   install:
-    name: install from the marketplace and run the installed suite
+    name: install the candidate and run the installed suite
     runs-on: ${{ matrix.os }}
+    # NFR-002 asks for an install proof cheap enough to always run, and the budget is 300 seconds.
+    # Round 12: a proof row that printed the durations asserted nothing about them, and the same
+    # command shape exited 0 against a job of 361 seconds. Here the budget fails the job.
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       matrix:
@@ -222,65 +226,62 @@ jobs:
       - name: Install the Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
-      - name: Add the marketplace and install the plugin
+      # Round 12: this job used to add the marketplace from GitHub, which serves the default branch.
+      # On a branch push that installed some other commit, so the proof measured whatever main held
+      # rather than the candidate. `marketplace add` takes a path, so the candidate installs itself.
+      - name: Install the candidate from this checkout
         run: |
-          claude plugin marketplace add "$GITHUB_REPOSITORY"
+          claude plugin marketplace add "$PWD"
           claude plugin install claude-code-route
 
-      - name: The installed copy is the tree the default branch publishes
+      - name: The installed copy is this commit
         if: runner.os == 'Linux'
         run: |
           suite=$(find "$HOME/.claude/plugins/cache" -type f -name route-lint.test.mjs | head -1)
           test -n "$suite" || { echo "no installed copy found"; exit 1; }
           root=$(dirname "$(dirname "$suite")")
-          git fetch --depth 1 origin "$GITHUB_DEFAULT_BRANCH"
           compared=0
           differ=0
           while IFS= read -r f; do
             rel=${f#"$root"/}
             compared=$((compared + 1))
-            if ! git cat-file -e "FETCH_HEAD:$rel" 2>/dev/null; then
-              echo "installed but not published: $rel"
+            if ! git cat-file -e "$GITHUB_SHA:$rel" 2>/dev/null; then
+              echo "installed but not in this commit: $rel"
               differ=1
               continue
             fi
-            if [ "$(git hash-object "$f")" != "$(git rev-parse "FETCH_HEAD:$rel")" ]; then
-              echo "differs from the published tree: $rel"
+            if [ "$(git hash-object "$f")" != "$(git rev-parse "$GITHUB_SHA:$rel")" ]; then
+              echo "differs from this commit: $rel"
               differ=1
             fi
           done < <(find "$root" -type f -not -path '*/.git/*')
-          published=0
+          tracked=0
           while IFS= read -r rel; do
-            published=$((published + 1))
+            tracked=$((tracked + 1))
             if [ ! -f "$root/$rel" ]; then
-              echo "published but not installed: $rel"
+              echo "in this commit but not installed: $rel"
               differ=1
             fi
-          done < <(git ls-tree -r --name-only FETCH_HEAD)
-          echo "compared $compared installed files against $published published on $GITHUB_DEFAULT_BRANCH"
+          done < <(git ls-tree -r --name-only "$GITHUB_SHA")
+          echo "compared $compared installed files against $tracked tracked at $GITHUB_SHA"
           # A walk that finds nothing leaves differ at 0, which is how a comparison passes without
           # comparing. The floor catches an empty walk on either side, not a count.
           test "$compared" -ge 20 || { echo "walked too few installed files to prove anything"; exit 1; }
-          test "$published" -ge 20 || { echo "walked too few published files to prove anything"; exit 1; }
-          test "$differ" -eq 0 || { echo "the installed copy is not the published tree"; exit 1; }
-        env:
-          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          test "$tracked" -ge 20 || { echo "walked too few tracked files to prove anything"; exit 1; }
+          test "$differ" -eq 0 || { echo "the installed copy is not this commit"; exit 1; }
 
       - name: Claude Code loads the plugin it installed
         run: |
-          git fetch --depth 1 origin "$GITHUB_DEFAULT_BRANCH"
-          git show "FETCH_HEAD:.claude-plugin/plugin.json" > published-manifest.json
-          want=$(node -p "require('./published-manifest.json').version")
-          rm published-manifest.json
+          want=$(node -p "require('./.claude-plugin/plugin.json').version")
           claude plugin details claude-code-route > details.txt || { cat details.txt; exit 1; }
           cat details.txt
           # Files landing on disk is not the plugin working. This is the CLI resolving the manifest,
-          # reporting the version the default branch publishes, and listing the skill as loadable.
-          grep -q "Skills (1)  claude-code-route" details.txt || { echo "the CLI does not list the skill"; exit 1; }
-          grep -q "(claude-code-route) $want" details.txt || { echo "the CLI reports a version that is not $want"; exit 1; }
+          # reporting the version this commit declares, and listing the skill as loadable.
+          # Round 11: unanchored, these accepted `claude-code-route-extra`, `1x1x2` and `1.1.20`.
+          # -x matches the whole line and -F takes the pattern literally, so a dot is a dot.
+          grep -qxF "  Skills (1)  claude-code-route" details.txt || { echo "the CLI does not list exactly the skill this plugin ships"; exit 1; }
+          grep -qxF "Claude Code Route (claude-code-route) $want" details.txt || { echo "the CLI reports a version that is not $want"; exit 1; }
           rm details.txt
-        env:
-          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
       - name: The installed copy runs its own suite
         run: |
@@ -288,3 +289,17 @@ jobs:
           test -n "$suite" || { echo "the installed copy carries no test suite"; exit 1; }
           echo "found: $suite"
           cd "$(dirname "$(dirname "$suite")")" && node tests/route-lint.test.mjs | tail -1
+
+      # Installing the candidate proves the artifact; it does not prove the channel users take.
+      # That one only means anything where the marketplace serves this commit, which is main.
+      - name: The marketplace serves this commit
+        if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        run: |
+          want=$(node -p "require('./.claude-plugin/plugin.json').version")
+          claude plugin marketplace remove claude-code-route
+          claude plugin marketplace add "$GITHUB_REPOSITORY"
+          claude plugin install claude-code-route
+          claude plugin details claude-code-route > channel.txt || { cat channel.txt; exit 1; }
+          cat channel.txt
+          grep -qxF "Claude Code Route (claude-code-route) $want" channel.txt || { echo "the marketplace serves a version that is not $want"; exit 1; }
+          rm channel.txt
