@@ -293,8 +293,9 @@ product's central claim, and what it replaced accepted every English word.
 
 ## Round 4
 
-Ran 2026-09-01 with `.route/` emptied first, over the round-3 repairs. **Ten findings, ten confirmed
-by execution, none refuted.** The prediction above — that a fourth round would find something — held.
+> 10 findings, 3 BLOCKER, 6 confirmed by execution, 3 by reading, 1 not saying which, 0 refuted. Generated from the table below by `.github/round-counts.mjs`.
+
+Ran 2026-09-01 with `.route/` emptied first, over the round-3 repairs. The prediction above — that a fourth round would find something — held.
 
 | # | Class | Severity | Summary | Verified | Outcome |
 | --- | --- | --- | --- | --- | --- |
@@ -322,8 +323,9 @@ including every false negative and false positive any of the four rounds produce
 
 ## Round 5
 
-Ran 2026-09-03 over the round-4 repairs, `.route/` emptied first. **Ten findings, ten confirmed by
-execution, none refuted.** The prediction the round-4 verdict made — that a fifth round would find
+> 10 findings, 3 BLOCKER, 7 confirmed by execution, 2 by reading, 1 not saying which, 0 refuted. Generated from the table below by `.github/round-counts.mjs`.
+
+Ran 2026-09-03 over the round-4 repairs, `.route/` emptied first. The prediction the round-4 verdict made — that a fifth round would find
 something — held for the fifth time running.
 
 | # | Class | Severity | Summary | Verified | Outcome |
@@ -358,8 +360,9 @@ figure this project has a rule against. So the Proof section says it.
 
 ## Round 6
 
-Ran 2026-09-03 over the round-5 repairs, `.route/` emptied first. **Eight findings, eight confirmed
-by executing their verification steps, none refuted.** The sixth round in a row to find something.
+> 8 findings, 2 BLOCKER, 4 confirmed by execution, 3 by reading, 1 not saying which, 0 refuted. Generated from the table below by `.github/round-counts.mjs`.
+
+Ran 2026-09-03 over the round-5 repairs, `.route/` emptied first. The sixth round in a row to find something.
 
 | # | Class | Severity | Summary | Verified | Outcome |
 | --- | --- | --- | --- | --- | --- |
@@ -399,8 +402,10 @@ root, from `skills/` and from `evals/`.
 
 **Delivered with gaps.**
 
-**Fifty findings across six rounds** — four found by probing, then 7, 11, 10, 10, 8 by adversarial review. Every
-one confirmed by executing its verification step, none refuted, in any round. The tabled findings
+**Fifty findings across six rounds** — four found by probing, then 7, 11, 10, 10, 8 by adversarial review. <!-- quoted -->
+None refuted in any round. Of the 46 tabled findings, 35 were confirmed by executing a <!-- quoted -->
+verification step and 11 by reading one, counted from the Verified column. This section once <!-- quoted -->
+claimed all of them were executed, and its own tables said otherwise; the distinction is the one this method exists to keep. The tabled findings
 number 46; four more were found by probing before the first review, and the total is the sum.
 That arithmetic is written out because the companion plan was caught this same day claiming a figure
 nobody had counted.

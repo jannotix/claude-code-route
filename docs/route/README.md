@@ -6,7 +6,7 @@ are real artifacts rather than illustrations written to look good.
 
 | File | What it is |
 | --- | --- |
-| `plans/lint-false-negatives/PLAN.md` | A Standard plan taken through six adversarial review rounds. Fifty findings, every one confirmed by executing its verification step, none refuted. The findings tables record what was wrong, how it was proven wrong, and where the repair landed. |
+| `plans/lint-false-negatives/PLAN.md` | A Standard plan taken through six adversarial review rounds. Fifty findings, none refuted. Of the 46 the tables carry, 35 were confirmed by executing a verification step and 11 by reading one, counted from the Verified column; four more were found by probing before the first review. An earlier version of this line said every one was executed, and its own tables said otherwise. The findings tables record what was wrong, how it was proven wrong, and where the repair landed. |
 | `plans/release-1-1-0/PLAN.md` | A Guarded plan: the release this version is part of, including the seven findings that made the previous version not ready to ship. |
 | `HISTORY.jsonl` | The append-only, hash-chained record of who did what, when, with which model. `node skills/claude-code-route/scripts/route-history.mjs render` turns it into a table. |
 | `MAP.md` | The index `route-map.mjs` produces for this repository. |

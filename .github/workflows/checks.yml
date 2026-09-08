@@ -102,6 +102,9 @@ jobs:
       - name: Every published directory states its purpose
         run: node .github/published-dirs.mjs .
 
+      - name: Every round carries the counts its table produces
+        run: node .github/round-counts.mjs .
+
       - name: Every eval scaffold is runnable bash
         run: |
           node -e '
@@ -290,16 +293,61 @@ jobs:
           echo "found: $suite"
           cd "$(dirname "$(dirname "$suite")")" && node tests/route-lint.test.mjs | tail -1
 
-      # Installing the candidate proves the artifact; it does not prove the channel users take.
-      # That one only means anything where the marketplace serves this commit, which is main.
-      - name: The marketplace serves this commit
+      # Installing the candidate proves the artifact; it does not prove the channel users take. That
+      # one only means anything where the marketplace serves this commit, which is the default branch.
+      # Round 13: this step checked the version and nothing else, so a copy reporting the right
+      # version with `Skills (0)` passed the check meant to prove the plugin loads. It now makes the
+      # same three assertions the candidate install makes, over the copy the marketplace served.
+      - name: The marketplace serves this commit, and it loads and passes from there
         if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         run: |
           want=$(node -p "require('./.claude-plugin/plugin.json').version")
+          claude plugin uninstall claude-code-route
           claude plugin marketplace remove claude-code-route
+          # The candidate install left a cache directory at the same path. Removing it is what makes
+          # the copy tested below the one the marketplace just served.
+          rm -rf "$HOME/.claude/plugins/cache/claude-code-route"
           claude plugin marketplace add "$GITHUB_REPOSITORY"
           claude plugin install claude-code-route
           claude plugin details claude-code-route > channel.txt || { cat channel.txt; exit 1; }
           cat channel.txt
+          grep -qxF "  Skills (1)  claude-code-route" channel.txt || { echo "the marketplace copy does not list exactly the skill this plugin ships"; exit 1; }
           grep -qxF "Claude Code Route (claude-code-route) $want" channel.txt || { echo "the marketplace serves a version that is not $want"; exit 1; }
           rm channel.txt
+          suite=$(find "$HOME/.claude/plugins/cache" -type f -name route-lint.test.mjs | head -1)
+          test -n "$suite" || { echo "the marketplace copy carries no test suite"; exit 1; }
+          echo "found: $suite"
+          root=$(dirname "$(dirname "$suite")")
+          # Round 14: the right version with one skill and a passing suite is not identity. A
+          # different tree can have all three, which is the class REQ-001 exists to prevent. The
+          # comparison runs where the byte comparison means something, which is Linux.
+          if [ "$RUNNER_OS" = Linux ]; then
+            compared=0
+            differ=0
+            while IFS= read -r f; do
+              rel=${f#"$root"/}
+              compared=$((compared + 1))
+              if ! git cat-file -e "$GITHUB_SHA:$rel" 2>/dev/null; then
+                echo "served but not in this commit: $rel"
+                differ=1
+                continue
+              fi
+              if [ "$(git hash-object "$f")" != "$(git rev-parse "$GITHUB_SHA:$rel")" ]; then
+                echo "the marketplace copy differs from this commit: $rel"
+                differ=1
+              fi
+            done < <(find "$root" -type f -not -path '*/.git/*')
+            tracked=0
+            while IFS= read -r rel; do
+              tracked=$((tracked + 1))
+              if [ ! -f "$root/$rel" ]; then
+                echo "in this commit but not served: $rel"
+                differ=1
+              fi
+            done < <(git ls-tree -r --name-only "$GITHUB_SHA")
+            echo "the marketplace served $compared files against $tracked tracked at $GITHUB_SHA"
+            test "$compared" -ge 20 || { echo "walked too few served files to prove anything"; exit 1; }
+            test "$tracked" -ge 20 || { echo "walked too few tracked files to prove anything"; exit 1; }
+            test "$differ" -eq 0 || { echo "the marketplace does not serve this commit"; exit 1; }
+          fi
+          cd "$root" && node tests/route-lint.test.mjs | tail -1

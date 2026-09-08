@@ -835,6 +835,209 @@ src/
   rmSync(dir, { recursive: true, force: true });
 }
 
+// Seven wrong figures across two releases were all in prose. Round 15 answered by reading each round
+// summary against its table; rounds 16 and 17 found nine ways past that reader. Reading prose
+// robustly is open-ended, so the counts are generated from the table instead and the check is whether
+// the file already holds what the generator writes. (REQ-008)
+{
+  const counts = join(here, '..', '.github', 'round-counts.mjs');
+  const { roundSections, countsLine, rewrite, strayCounts } = await import(pathToFileURL(counts).href);
+  const NL = String.fromCharCode(10);
+  const B = String.fromCharCode(96);
+  const plan = (...lines) => lines.join(NL);
+  const HEAD = ['| # | Class | Severity | Summary | Verified | Outcome |',
+    '| --- | --- | --- | --- | --- | --- |'];
+
+  const two = plan(
+    '## Round 3 — a round with a table',
+    '', 'Ran today over the previous repair.', '',
+    ...HEAD,
+    '| 3.1 | DEFECT | BLOCKER | a | confirmed by running it | fixed |',
+    '| 3.2 | UNPROVEN | MAJOR | b | refuted by its own step | discarded |',
+    '', '## Verdict', '');
+
+  const s = roundSections(two)[0];
+  check('a table is counted by its columns',
+    s.rows.length === 2 && s.blockers === 1 && s.refuted === 1,
+    JSON.stringify({ rows: s.rows, blockers: s.blockers, refuted: s.refuted }));
+  check('the generated line states what the table holds',
+    countsLine(s) === '> 2 findings, 1 BLOCKER, 1 confirmed by execution, 1 refuted. '
+      + `Generated from the table below by ${B}.github/round-counts.mjs${B}.`, countsLine(s));
+
+  // Round 17: a four-backtick fence closed by a three-backtick line let the row after it be counted.
+  const longerFence = plan(
+    '## Round 4 — an example of a table, not a table',
+    '', 'Ran today.', '',
+    B.repeat(4), B.repeat(3),
+    '| # | Class | Severity | Summary | Verified | Outcome |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| 4.1 | DEFECT | BLOCKER | a | c | f |',
+    B.repeat(4), '', '## Verdict', '');
+  check('a fence closes only on its own delimiter, at least as long',
+    roundSections(longerFence)[0].rows.length === 0,
+    JSON.stringify(roundSections(longerFence)[0].rows));
+
+  // Round 17: a lone row-shaped line was read as a table, and a bold severity cell was invisible.
+  const lone = plan('## Round 5 — one row and no table', '', 'Ran today.', '',
+    '| 5.1 | DEFECT | BLOCKER | a | c | f |', '', '## Verdict', '');
+  check('a row with no header above it is not a table',
+    roundSections(lone)[0].rows.length === 0, JSON.stringify(roundSections(lone)[0].rows));
+
+  const bold = plan('## Round 6 — emphasis in a cell', '', 'Ran today.', '',
+    ...HEAD,
+    '| 6.1 | DEFECT | **BLOCKER** | a | c | f |',
+    '| 6.2 | **DEFECT** | MAJOR | b | c | f |', '', '## Verdict', '');
+  const b6 = roundSections(bold)[0];
+  check('emphasis is markup, not a different severity',
+    b6.rows.length === 2 && b6.blockers === 1, JSON.stringify({ rows: b6.rows, blockers: b6.blockers }));
+
+  // Columns are located by name, so their order is not part of the contract.
+  const reordered = plan('## Round 7 — columns in another order', '', 'Ran today.', '',
+    '| Severity | # | Summary | Verified |',
+    '| --- | --- | --- | --- |',
+    '| BLOCKER | 7.1 | a | confirmed |',
+    '| MINOR | 7.2 | b | confirmed |', '', '## Verdict', '');
+  const r7 = roundSections(reordered)[0];
+  check('columns are found by name, not by position',
+    r7.rows.length === 2 && r7.blockers === 1, JSON.stringify({ rows: r7.rows, blockers: r7.blockers }));
+
+  // A row belonging to another round is not this round's, whatever table it sits in.
+  const foreign = plan('## Round 8 — a row from elsewhere', '', 'Ran today.', '',
+    ...HEAD,
+    '| 8.1 | DEFECT | BLOCKER | a | c | f |',
+    '| 9.1 | DEFECT | BLOCKER | b | c | f |', '', '## Verdict', '');
+  check('a row from another round is not counted here',
+    roundSections(foreign)[0].rows.length === 1, JSON.stringify(roundSections(foreign)[0].rows));
+
+  // The generator writes the line, and running it again changes nothing.
+  const once = rewrite(two);
+  check('the generated line is inserted under the heading',
+    once.includes('> 2 findings, 1 BLOCKER, 1 confirmed by execution, 1 refuted.'), once.slice(0, 200));
+  check('rewriting is idempotent', rewrite(once) === once);
+  check('a stale line is replaced, not repeated',
+    (rewrite(once.replace('2 findings, 1 BLOCKER', '9 findings, 4 BLOCKER'))
+      .match(/Generated from the table below/g) || []).length === 1);
+
+  // One place, enforced: a count left in prose is a second thing to keep true.
+  check('a count in a round section prose is reported',
+    strayCounts(once.replace('Ran today over the previous repair.',
+      'Ran today. **Two findings, two confirmed.** One was BLOCKER.')).length > 0);
+  check('the generated line is not itself a stray count', strayCounts(once).length === 0,
+    strayCounts(once).join(' | '));
+  check('a quoted figure is exempt by a visible marker',
+    strayCounts(once.replace('Ran today over the previous repair.',
+      'The tag object read "forty-three findings". <!-- quoted -->')).length === 0);
+  check('a count outside any round section is not this check’s business',
+    strayCounts('## Verdict' + NL + NL + 'Nine findings in all.' + NL).length === 0);
+
+
+  // Round 18 attacked the generator and found six ways it miscounted or asserted what the table does
+  // not say. Each probe below is one of them. (REQ-008, AC-008.6)
+  const VER = ['| # | Class | Severity | Verified |', '| --- | --- | --- | --- |'];
+
+  const mixed = plan('## Round 9 — how each row was checked', '', 'Ran today.', '',
+    ...VER,
+    '| 9.1 | DEFECT | BLOCKER | confirmed by running it |',
+    '| 9.2 | DEFECT | MAJOR | confirmed by reading the caller |',
+    '| 9.3 | DEFECT | MAJOR | refuted by its own step |',
+    '| 9.4 | DEFECT | MINOR | it seemed right |', '', '## Verdict', '');
+  const m9 = roundSections(mixed)[0];
+  check('how a row was checked is read, not assumed',
+    m9.read === 1 && m9.refuted === 1 && m9.unstated.length === 1,
+    JSON.stringify({ read: m9.read, refuted: m9.refuted, unstated: m9.unstated }));
+  check('the line names reading and silence rather than calling them execution',
+    countsLine(m9).includes('1 confirmed by execution, 1 by reading, 1 not saying which, 1 refuted'),
+    countsLine(m9));
+
+  // A cell that mentions a word while describing a defect is not a row of that kind. Round 18's own
+  // table made this generator report a refuted finding it did not have, which is `grep -c BLOCKER`
+  // in another costume: the category is anchored at the start of the cell.
+  const mentions = plan('## Round 10 — a cell that names a word it is not', '', 'Ran today.', '',
+    ...VER,
+    '| 10.1 | DEFECT | MAJOR | confirmed: `refuted` after an escaped pipe was read as confirmed |',
+    '| 10.2 | DEFECT | MAJOR | **refuted**: the probe returns nothing |', '', '## Verdict', '');
+  const m10 = roundSections(mentions)[0];
+  check('a cell naming a category is not a row of that category',
+    m10.refuted === 1 && m10.unstated.length === 0,
+    JSON.stringify({ refuted: m10.refuted, unstated: m10.unstated }));
+
+  // Round 18: a three-backtick line with code after it closed a four-backtick fence.
+  const trailing = plan('## Round 2 — a fence with content on the closing line', '', 'Ran today.', '',
+    B.repeat(4), B.repeat(3) + 'still-code',
+    '| # | Class | Severity | Verified |', '| --- | --- | --- | --- |',
+    '| 2.1 | DEFECT | BLOCKER | confirmed |',
+    B.repeat(4), '', '## Verdict', '');
+  check('a closing fence carries nothing but its delimiter',
+    roundSections(trailing)[0].rows.length === 0, JSON.stringify(roundSections(trailing)[0].rows));
+
+  // Round 18: splitting on an escaped pipe shifted every column after it.
+  // The pipe stands in a column before Verified, so a bad split moves Verified along by one and the
+  // category is read off the wrong cell.
+  const escaped = plan('## Round 3 — an escaped pipe in a cell', '', 'Ran today.', '',
+    '| # | Class | Severity | Summary | Verified |', '| --- | --- | --- | --- | --- |',
+    '| 3.1 | DEFECT | BLOCKER | the a \\| b case | refuted: its own probe returns nothing |',
+    '', '## Verdict', '');
+  const e3 = roundSections(escaped)[0];
+  check('an escaped pipe is not a column boundary',
+    e3.refuted === 1 && e3.unstated.length === 0,
+    JSON.stringify({ refuted: e3.refuted, unstated: e3.unstated }));
+
+  // Round 18: a blank id was dropped and a repeated one counted twice, both without a word.
+  const blank = plan('## Round 4 — a row with no id', '', 'Ran today.', '',
+    ...VER, '| | DEFECT | BLOCKER | confirmed |', '', '## Verdict', '');
+  check('a row with no id is named, not dropped',
+    strayCounts(blank).some((d) => d.includes('no id')), strayCounts(blank).join(' | '));
+  const twice = plan('## Round 5 — the same id twice', '', 'Ran today.', '',
+    ...VER, '| 5.1 | DEFECT | BLOCKER | confirmed |', '| 5.1 | DEFECT | MAJOR | confirmed |',
+    '', '## Verdict', '');
+  const t5 = roundSections(twice)[0];
+  check('a repeated id is counted once and reported',
+    t5.rows.length === 1 && strayCounts(twice).some((d) => d.includes('more than once')),
+    JSON.stringify({ rows: t5.rows, bad: strayCounts(twice) }));
+
+  // Round 18: a second line carrying the magic phrase was exempted along with the first.
+  const twoLines = rewrite(plan('## Round 6 — a smuggled second line', '', 'Ran today.', '',
+    ...VER, '| 6.1 | DEFECT | BLOCKER | confirmed |', '',
+    '> 99 findings, 99 BLOCKER. Generated from the table below.', '', '## Verdict', ''));
+  check('only the first generated line is the generated line',
+    strayCounts(twoLines).some((d) => d.includes('a second generated line')),
+    strayCounts(twoLines).join(' | '));
+
+  // Round 18: a qualifier between the number and the noun is still a count; an identifier is not.
+  const qualified = rewrite(plan('## Round 7 — a count with a qualifier', '', 'Ran today.', '',
+    ...VER, '| 7.1 | DEFECT | BLOCKER | confirmed |', '',
+    'There were 21 total findings.', '', '## Verdict', ''));
+  check('a qualifier between the number and the noun does not hide a count',
+    strayCounts(qualified).some((d) => d.includes('a count in prose')), strayCounts(qualified).join(' | '));
+  const identifier = qualified.replace('There were 21 total findings.',
+    'This is finding 7.1 in another costume.');
+  check('an identifier is not a count', strayCounts(identifier).length === 0,
+    strayCounts(identifier).join(' | '));
+
+  // Round 18: nothing asserted the failing branch, its exit code, or the file it names.
+  {
+    const dir = mkdtempSync(join(tmpdir(), 'route-counts-'));
+    mkdirSync(join(dir, 'docs', 'route', 'plans', 'demo'), { recursive: true });
+    const file = join(dir, 'docs', 'route', 'plans', 'demo', 'PLAN.md');
+    writeFileSync(file, plan('## Round 1 — no generated line yet', '', 'Ran today.', '',
+      ...VER, '| 1.1 | DEFECT | BLOCKER | confirmed |', '', '## Verdict', ''), 'utf8');
+    const stale = run(counts, [dir]);
+    check('a stale plan exits 1 and names the file',
+      stale.code === 1 && stale.err.includes('PLAN.md') && stale.err.includes('stale'),
+      `exit ${stale.code}: ${stale.err.trim()}`);
+    const written = run(counts, [dir, '--write']);
+    check('--write exits 0 and says what it rewrote',
+      written.code === 0 && written.out.includes('rewritten'), `exit ${written.code}: ${written.out.trim()}`);
+    check('the same check then passes', run(counts, [dir]).code === 0);
+    rmSync(dir, { recursive: true, force: true });
+  }
+
+  // The plans this repository ships are the corpus the check exists for.
+  const r = run(counts, [join(here, '..')]);
+  check('every round in this repository carries the counts its table produces', r.code === 0,
+    `exit ${r.code}: ${r.err.trim()}`);
+}
+
 const failed = results.filter((r) => !r.ok);
 process.stdout.write(`\n${results.length - failed.length}/${results.length} passed\n`);
 process.exit(failed.length > 0 ? 1 : 0);

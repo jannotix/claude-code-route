@@ -51,8 +51,18 @@ REQ-005  Continuous integration must exercise every operating system the plugin 
 REQ-006  A release must be proven by installing it, not by inspecting it.
   AC-006.1  Given a clean environment When the marketplace is added and the plugin installed by the commands the README gives Then the install succeeds
   AC-006.2  Given that installed copy When its own test suite is run from the installed path Then it passes
-  AC-006.3  Given AC-006.1 and AC-006.2 When CI runs Then both are executed there, not only by hand, on each operating system the README claims rather than on one
+  AC-006.3  Given AC-006.1 and AC-006.2 When CI runs Then both are executed there, not only by hand, on each operating system the README claims rather than on one. Two installs answer this and they answer different halves: the candidate installs itself from the checkout on every push, which is what proves the commit under review, and the marketplace install runs on the default branch, which is the only place that channel can serve this commit at all. A candidate is not the default branch, so the marketplace half is proven at publication and confirmed by the next release's round -- not before the tag, because no marketplace can serve a commit that is not yet published
   AC-006.4  Given the installed plugin When `claude plugin details claude-code-route` is run Then the CLI lists one skill by name and reports the version the default branch publishes. Files landing on disk is not the plugin working, and until this criterion existed nothing distinguished the two
+
+REQ-008  A round must state its counts once, generated from its own table.
+  AC-008.1  Given a `## Round n` section with a table naming a `#` column and a `Severity` column When the generator runs Then it writes one line under the heading carrying the number of that round's rows, how many carry BLOCKER in the severity column, how many the Verified column does not call refuted, and how many it does. Running it again changes nothing
+  AC-008.2  Given a plan whose generated line does not match what the generator would write When the check runs Then it exits 1 and names the file. The check is a comparison, not a reading: rounds 15 to 17 found nine ways past a reader of prose, and reading prose robustly is open-ended in a way a byte comparison is not
+  AC-008.3  Given any other line inside a round section stating a count of findings or BLOCKERs When the check runs Then it is reported, because a second statement of a count is a second thing to keep true and that is how every one of them drifted. A line quoting a figure from elsewhere -- a published tag object, an aggregate across rounds -- carries `<!-- quoted -->`, so `git grep quoted` lists every exemption anyone took
+  AC-008.4  Given a table inside a fenced block, a row with no header above it, a cell whose severity is emphasised, columns in another order, or a row belonging to a different round When the generator counts Then the fenced block is skipped and closes only on its own delimiter at least as long, a row without a header and separator is not a table, emphasis is markup rather than a different word, columns are found by name, and a foreign row is not counted. Each is a case round 17 found and a case in the suite
+  AC-008.6 Given a row whose Verified cell says it was refuted, or confirmed by reading, or says neither When the generated line is written Then each is counted in its own category and none is called confirmed by execution. Calling every non-refuted row execution-confirmed put a false statement into every generated line at once, which is worse than the drifting figure the requirement was written to stop
+  AC-008.7  Given a closing fence carrying content, an escaped pipe inside a cell, a row with no id, a repeated id, or a second line bearing the generated marker When the check runs Then the fence does not close, the pipe is not a boundary, and the other three are named rather than silently dropped, double-counted or exempted
+  AC-008.8  Given a count stated in prose with a qualifier between the number and the noun When the check runs Then it is reported; given an identifier such as `finding 7.1`, it is not. A count with no noun after it at all -- an aggregate across rounds, a list of totals -- is beyond what this reads, and such a line carries the `<!-- quoted -->` marker instead
+  AC-008.5  Given rows for a round with no `## Round n` section of its own When the generator runs Then they are not counted. A findings table covering several rounds at once is a layout this requirement does not claim to cover, and `docs/route/plans/lint-false-negatives/PLAN.md` has one. Nor does it cover a confirmed or refuted total stated outside a round section
 
 REQ-007  Every top-level directory in the published tree must have a stated reason to be there.
   AC-007.1  Given `docs/route/` in the published tree When a reader opens it Then a README in that directory says what it is and why it ships
@@ -81,6 +91,7 @@ NFR-002  Install cost: a first install and its verification complete in under 5 
 | REQ-004 | The runtime floor is declared at each script's entry, in `README.md` and in the manifest's `engines.node`, and the five declarations are asserted equal | each script's preamble, `README.md`, `.claude-plugin/plugin.json`, checked by `tests/route-lint.test.mjs` | release |
 | REQ-005 | The matrix covers the platforms the README claims | `.github/workflows/checks.yml` | release |
 | REQ-006 | A release is proven by installing it, and by the CLI loading what was installed | `.github/workflows/checks.yml`, the install job's matrix | release |
+| REQ-008 | A round states its counts once, generated from its table | `.github/round-counts.mjs`, called by the workflow and exercised by the suite | release |
 | REQ-007 | Every top-level published directory declares its purpose | a `README.md` in each of `.claude-plugin/`, `.github/`, `docs/`, `evals/`, `skills/` and `tests/`, plus `docs/route/README.md`, reported by `.github/published-dirs.mjs`, which the workflow calls | release |
 | NFR-001 | Zero errors, and every warning ruled on in writing | this plan's Adjudicated warnings section | release |
 | NFR-002 | The install proof is cheap enough to always run | `.github/workflows/checks.yml` | release |
@@ -131,7 +142,7 @@ INV-002  The history chain verifies, and any deliberate rewrite of it is recorde
 ## Out of scope
 
 - The eval runner. It remains in early access on this account and no release waits on it.
-- Rewriting git commit metadata. The author address is in all thirteen commit headers, and removing
+- Rewriting git commit metadata. The author address is in every commit header, and removing
   it from one file while it stays in every commit would be theatre rather than a fix. Whether to
   rewrite git history is a separate decision with its own cost, taken outside this plan.
 - New skill capability. This release ships what exists, correctly labelled.
@@ -199,7 +210,7 @@ None. The release adds no dependency; the CI matrix uses actions already in the 
 ## Findings
 
 The adversarial pass that produced this plan, run 2026-09-04 against `4902921` and the installed
-artifact. **Seven findings, seven confirmed by execution, none refuted.**
+artifact. **Seven findings, none refuted: 6 confirmed by execution, 1 by reading, 0 whose row does not say which.** <!-- quoted -->
 
 | # | Class | Severity | Summary | Verified | Outcome |
 | --- | --- | --- | --- | --- | --- |
@@ -225,17 +236,26 @@ at 145 of 145.
 Every row below runs from the repository root. `tests/` is in the repository, so these are
 reproducible by anyone holding the commit.
 
+A row citing `gh run list --commit "$(git rev-parse '<tag>^{commit}')"` is a **reproducer, not the
+proof**. The proof is the CI run at the commit the row is about, and a commit cannot name a run that
+happens after it is written -- that is AC-001.6, and it is why the receipts for a release live in the
+reviewer's evidence rather than in the tree. Before the tag exists the command exits 1; after it is
+cut the command retrieves the run whose conclusion the row reports. Rounds 7, 9, 10, 11 and 12 each
+found a version of a proof row naming a run it could not have known, and this paragraph is what
+replaced guessing at one.
+
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.2^{commit}')" --json name,conclusion` — the install job hashed every installed file against `GITHUB_SHA` and walked every tracked file back the other way; none differed and none was missing from either side. The revision expression is quoted because PowerShell otherwise reads `{commit}` as `-encodedCommand` and git returns the tag's parent at exit 128 -- a wrong SHA of the right shape | pass |
+| REQ-001 | **AC-001.2, AC-001.4 and AC-001.6 are pending T10**: each asks something of the release tag, and no tag exists before it is cut. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — the install job hashed every installed file against `GITHUB_SHA` and walked every tracked file back the other way; none differed and none was missing from either side. The revision expression is quoted because PowerShell otherwise reads `{commit}` as `-encodedCommand` and git returns the tag's parent at exit 128 -- a wrong SHA of the right shape | AC-001.3 and AC-001.5 pass; AC-001.2, AC-001.4 and AC-001.6 pending T10; **the marketplace half of AC-001.1 is open until publication**, see Waivers |
 | REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
 | REQ-003 | `node tests/route-lint.test.mjs` — six checks import `.github/changelog-gate.mjs`, the file the workflow calls, and run it both ways: exit 1 naming the first unreleased line, exit 0 once that entry sits under a version heading. Gutting the gate to return nothing fails two of them | pass |
-| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.2^{commit}')" --json name,conclusion` runs the suite at 18.0.0 on all three platforms | pass |
-| REQ-005 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.2^{commit}')" --json name,conclusion` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | AC-005.1 and AC-005.3 pass; **AC-005.2 waived, see Waivers** |
-| REQ-006 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.2^{commit}')" --json name,conclusion` — on each of the three operating systems the install job installed **this commit** from the checkout, ran `claude plugin details`, matched the whole line naming one skill and the whole line naming this commit's version, and ran the installed copy's suite. On the default branch it then reinstalls through the marketplace and matches the version again, which proves the channel; a branch push cannot prove the channel, because the marketplace serves the default branch | pass |
-| REQ-007 | `node tests/route-lint.test.mjs` — six checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
-| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — 0 errors and the 14 warnings the Adjudicated section rules on. The walker skips dot-prefixed entries, so `$ node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 .github .claude-plugin --layers domain,application,release` covers the two gate modules and the manifests the first pass cannot reach: 0 errors, 0 warnings | pass |
-| NFR-002 | The install job declares `timeout-minutes: 5`, so a run over the 300-second budget fails instead of being reported. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.2^{commit}')" --json name,conclusion` — the job's conclusion is the budget's verdict. A row that printed the durations asserted nothing about them: round 12 ran that command shape against a 361-second job and it exited 0 | pass |
+| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` runs the suite at 18.0.0 on all three platforms | pass |
+| REQ-005 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | AC-005.1 and AC-005.3 pass; **AC-005.2 waived, see Waivers** |
+| REQ-006 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — on each of the three operating systems the install job installed **this commit** from the checkout, ran `claude plugin details`, matched the whole line naming one skill and the whole line naming this commit's version, and ran the installed copy's suite. On the default branch it then reinstalls through the marketplace and matches the version again, which proves the channel; a branch push cannot prove the channel, because the marketplace serves the default branch | AC-006.1, AC-006.2 and the candidate half of AC-006.3 pass; **the marketplace half of AC-006.3 is open until publication**, see Waivers |
+| REQ-007 | `node tests/route-lint.test.mjs` — 9 checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
+| REQ-008 | `node tests/route-lint.test.mjs` — 28 checks import `.github/round-counts.mjs`, the file the workflow calls: how each row was checked read from its own cell rather than assumed, a closing fence carrying content, an escaped pipe, a row with no id, a repeated id, a second generated line, a qualifier between a number and its noun, an identifier that is not a count, and the failing branch with its exit code and the file it names. `$ node .github/round-counts.mjs .` reports 15 round sections across two plans, the counts each table produces, and no count stated anywhere else | pass |
+| NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — 0 errors and the 14 warnings the Adjudicated section rules on. The walker skips dot-prefixed entries, so `$ node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 .github .claude-plugin --layers domain,application,release` covers the three gate modules and the manifests the first pass cannot reach: 0 errors, 0 warnings | pass |
+| NFR-002 | The install job declares `timeout-minutes: 5`, so a run over the 300-second budget fails instead of being reported. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — the job's conclusion is the budget's verdict. A row that printed the durations asserted nothing about them: round 12 ran that command shape against a 361-second job and it exited 0 | pass |
 
 **What the matrix found on its first run, which is why REQ-005 exists.** Six jobs, and two failed:
 macOS at both Node versions, on the step that proves the history detects an edited entry. `sed -i`
@@ -254,7 +274,7 @@ that writes at the end discards every earlier change when a later assertion fire
 ## Gaps
 
 **Two requirements wait on a decision that is not the Planner's to take.** REQ-002 asks whether an
-address already present in thirteen commit headers should be removed from one file, and REQ-007 asks
+address already present in every commit header should be removed from one file, and REQ-007 asks
 whether this repository's own cycle artifacts are a demonstration or clutter. Both are the
 requester's, both are recorded as open, and T1 and T3 are blocked until they are answered. Guessing
 either would be the failure this method exists to prevent.
@@ -268,33 +288,23 @@ rather than raced against, and that is a change to `route-history` this release 
 **The round-6 repairs to the linter and the round-8 repairs to the capability fixture have not been
 attacked.** They are not part of this plan and do not block a release, but a release ships them.
 
-## Round 11 — the release cut
-
-Ran 2026-09-05 over `00fc38a..3fb532b`, the release cut itself, with the receipts in the reviewer's
-evidence rather than in the tree. **Four findings, four confirmed by executing their verification
-steps.** Two were BLOCKER. The count across the four rounds is seventeen, ten, nine, eight, four.
-
-| # | Class | Severity | Summary | Verified | Outcome |
-| --- | --- | --- | --- | --- | --- |
-| 11.1 | DEFECT | BLOCKER | The version window reopened between the round-10 repair and the release cut | confirmed: `de04601` reached the default branch at 02:41 still declaring 1.1.1, and `3fb532b` at 03:04 — twenty-three minutes in which the marketplace served a third tree by that name | recorded rather than repaired: a window already opened cannot be closed by a later tag. AC-001.7 postdates it and is what prevents the next one |
-| 11.2 | UNPROVEN | BLOCKER | The command chosen to be durable resolved to nothing | confirmed: `gh run list --commit` takes a SHA and passes a tag label through untouched | every row resolves the tag first with `git rev-parse <tag>^{commit}`, run against the 1.1.1 tag to prove it returns the run |
-| 11.3 | UNPROVEN | MAJOR | The load assertions accepted wrong names and versions | confirmed by execution: `claude-code-route-extra`, `1x1x2` and `1.1.20` all passed | `grep -qxF` matches the whole line literally; all three counterexamples now fail and the true line still passes |
-| 11.4 | UNPROVEN | MAJOR | NFR-002's proof asked for fields that carry no duration | confirmed: `--json name,conclusion` has no timing, and "26 seconds" was declared an earlier measurement | the row reads each install job's own start and finish |
-
-**11.1 is the honest limit of AC-001.7.** The criterion was written in the same commit that closed
-the window it describes, so it could not have prevented the window before it. It prevents the next
-one, and what happened here is recorded rather than reported as repaired. That distinction is the
-whole difference between this release and the two before it.
-
-**11.2 is the defect committed in the act of repairing it.** Rounds 7, 9 and 10 each found a proof
-row citing a CI run that was not the candidate's. The repair replaced the identifier with a command
-described as durable, and the command was never run. A citation that has not been executed is the
-same class of claim as a check that has not been proven to fail.
-
 ## Waivers
 
 A criterion here is closed by execution or it is waived in writing, and T10 depends on that being
-true of every one of them. There is one waiver.
+true of every one of them. There are three.
+
+**AC-001.1's marketplace half — open at the tag, for the same reason.** The criterion asks that the
+copy the marketplace installs and the matching tag be identical. The comparison that proves it runs
+on the default branch, because that is the only place the marketplace can serve this commit. The
+candidate install proves the artifact against its own SHA on every push; the channel is proven at
+publication and read by the next release's round.
+
+**AC-006.3's marketplace half — open at the tag, closed one push later.** A marketplace serves the
+default branch, so it cannot serve a commit that has not been published: no ordering makes that half
+executable before the tag. The candidate half runs on every push and proves the commit under review.
+The marketplace half runs on the first push of this commit to the default branch, which is the push
+that publishes it, and the next release's round reads that run. This is a waiver in the sense that
+the tag is cut with the criterion half-open, and it is not a gap that any amount of care would close.
 
 **AC-005.2 — the Windows lock regression is not detected deterministically.** Round 6 measured the
 race at about one writer in 250. The suite asserts that no writer failed outside the contract, which
@@ -304,181 +314,22 @@ raced one, which is a change to `route-history` that no requirement in this plan
 release ships with the regression undetected by construction rather than by oversight, and this
 sentence is the record of that decision.
 
-## Round 7 — the release, and the linter it ships
 
-Ran 2026-09-04 over two candidates, `.route/` emptied first and each patch cut to its own change
-rather than to the range between pushes. **Seventeen findings, seventeen confirmed by executing their
-verification steps, none refuted.** Six were BLOCKER.
+## Rounds
 
-This is the round T11 asked for. It happened after the 1.1.0 tag existed, which is the first finding
-in the table and the reason T11 now runs before T10.
-
-### On the release, `4902921..90ff4e7`
-
-| # | Class | Severity | Summary | Verified | Outcome |
-| --- | --- | --- | --- | --- | --- |
-| 7.1 | UNPROVEN | BLOCKER | The installed-suite check could not fail | confirmed: `bash -e -c 'node -e "process.exit(7)" \| tail -1'` exits 0, and the run log shows the install job on `/usr/bin/bash -e` with no `pipefail` | fixed, every job declares `shell: bash` |
-| 7.2 | DEFECT | BLOCKER | The published tree fails its own gate | confirmed: scanning `.` rather than `skills/` gave 1 error and 20 warnings, not the adjudicated 14 | fixed, 0 errors and 14 warnings over `.` |
-| 7.3 | WRONG-PLAN | BLOCKER | The plan declared delivery with T11 open | confirmed by reading the task table against the verdict | T11 moved before T10 |
-| 7.4 | DEFECT | MAJOR | AC-004.2 promised a named error on every older Node | confirmed: below Node 14 the module does not parse and no guard in it runs | criterion corrected to what a single-file guard can do |
-| 7.5 | DEFECT | MAJOR | The matrix omitted the current LTS | confirmed: `node: [18, 22]` against an AC naming floor and current LTS | fixed, 18, 22 and 24 |
-| 7.6 | DEFECT | MAJOR | AC-007.2's release check did not exist | confirmed: renaming `docs/route/README.md` and running the cited command still passed | built, and it fails when a README is removed |
-| 7.7 | DEFECT | MAJOR | The install proof did not run on every push | confirmed: `push: branches: [main]` | fixed, every push |
-| 7.8 | UNPROVEN | MAJOR | The changelog proof cited a file that never shipped | confirmed: `git cat-file -e 90ff4e7:cg_probe.js` exits non-zero | proof row now cites the committed suite |
-| 7.9 | DEFECT | BLOCKER | Four commits carried 1.1.0 before the tag existed | confirmed: two CI runs installed different trees, both reporting 1.1.0 | AC-001.4 states the window and when it must close |
-| 7.10 | MISPLACED | MAJOR | The floor is copied into three files, not placed once | confirmed: `REQUIRED_NODE_MAJOR` appears in all three scripts | placement corrected, and a test asserts the three agree |
-
-### On the linter it ships, `4f4499b..4902921`
-
-| # | Class | Severity | Summary | Verified | Outcome |
-| --- | --- | --- | --- | --- | --- |
-| 7.11 | DEFECT | BLOCKER | A two-backtick span bypassed the backtick rule | confirmed: a fenced span carrying `` ` `` was truncated at the inner backtick and accepted as marked | fixed, the scanner reads a fence of N |
-| 7.12 | DEFECT | MAJOR | A file-path owner was refused as two owners | confirmed at the candidate | already repaired before the tag |
-| 7.13 | SCOPE | MAJOR | The candidate changed the excluded comment-voice surface | confirmed by `git diff --name-status` | scope amended |
-| 7.14 | SCOPE | MAJOR | The suite drives tools the scope excluded | confirmed: the suite imports `route-map` and `route-history` | scope amended: testing a tool is not changing it |
-| 7.15 | UNPROVEN | BLOCKER | The receipt was not bound to the candidate | confirmed: the evidence said 154 checks, the candidate carried 145 | recorded; a freeze takes its evidence from the revision under review |
-| 7.16 | UNPROVEN | BLOCKER | CI masked a failing test process | the same defect as 7.1, reached from the other candidate | fixed with 7.1 |
-| 7.17 | MISPLACED | MAJOR | The placement named `SHELL_META`, the code has `hasShellMeta` | confirmed by `git grep -w SHELL_META` | placement corrected |
-
-**Seven of the seventeen are criteria that promised more than was built.** AC-007.2 named a release
-check nobody had written, AC-004.2 claimed coverage a single-file guard cannot have, AC-005.3 named
-an LTS the matrix did not carry, and a proof row cited a probe file that never entered the repository.
-The plan gate could not catch any of them: it checks that a proof *names a command*, not that the
-command proves what the criterion says. That is a real limit of the gate and it is written here rather
-than left for the next round to find again.
-
-**7.1 is the one that mattered most.** `node tests/... | tail -1` under `bash -e` reports `tail`'s
-status, so the job that proved the installed copy passes could not go red. Eight green jobs were
-reported for 1.1.0, and one of them was green by construction. The suite job had `shell: bash` and was
-sound; the install job did not.
-
-**7.2 came from asking a question the plan had not.** NFR-001 said "the published tree" and its proof
-scanned `skills/`. The marketplace publishes `./`. Scanning what actually ships found an error in a
-fixture full of deliberate defects — a file that existed to be wrong, sitting in the artifact users
-install. The corpus is written at run time now and asserted there, so it is exercised and nothing
-defective ships.
-
-**And two false positives that had been left as a named gap.** `comment-commented-code` refused prose
-beginning `from` and `print`. The gap was declared out of scope, and then the release requirement for
-zero unadjudicated warnings made it in scope. A keyword now counts only alongside a character that
-code carries and prose does not.
-
-158 checks pass. The gate over the whole published tree reports 0 errors and the 14 adjudicated
-warnings.
-
-## Round 8 — the 1.1.1 repairs, attacked
-
-Ran 2026-09-05 over `claude-code-route--v1.1.0..claude-code-route--v1.1.1`, the change and nothing
-else, with the evidence taken from the revision under review. **Ten findings, nine confirmed by
-executing their verification steps, one refuted by its own.** Three were BLOCKER.
-
-This is the round 1.1.1 shipped without. It ran after the tag again, and finding 8.5 is that fact.
-
-| # | Class | Severity | Summary | Verified | Outcome |
-| --- | --- | --- | --- | --- | --- |
-| 8.1 | WRONG-PLAN | BLOCKER | AC-001.4 permits what AC-001.2 forbids: two trees, one version | confirmed: `f35864c` and `d9d1466` both declare 1.1.1 and differ in `.github/workflows/checks.yml` | open |
-| 8.2 | DEFECT | BLOCKER | A mismatched backtick fence still closes a proof | **refuted**: the finding's own probe returns no match — three backticks closed by two matches nothing, so no span is accepted | discarded, counter-evidence recorded |
-| 8.3 | DEFECT | MAJOR | AC-004.2 overclaims across the whole of Node 14 | confirmed by execution: 14.13.0 exits 1 with `ERR_UNSUPPORTED_ESM_URL_SCHEME`, because the `node:` specifiers link before the guard runs; 14.13.1 and 16.20.2 exit 2 with the named message | open |
-| 8.4 | DEFECT | MAJOR | The directory check tests existence, not purpose | confirmed by execution: three empty `README.md` files and an undocumented `skills/undocumented/` pass the step with exit 0 | open |
-| 8.5 | UNPROVEN | BLOCKER | The tagged repairs were never reviewed | confirmed: `90ff4e7..claude-code-route--v1.1.1` carries two commits, one of them the tag | open |
-| 8.6 | UNPROVEN | BLOCKER | Nothing recorded compares the installed tree with the tag | confirmed: the install job installs and runs the suite, and compares no hash; the plan's proof row cites the 1.1.0 ancestry instead | open |
-| 8.7 | UNPROVEN | MAJOR | The changelog proof cites a suite that does not carry it | confirmed: `CHANGELOG` and `Unreleased` appear nowhere in `tests/route-lint.test.mjs` | open |
-| 8.8 | UNPROVEN | MAJOR | The Windows EPERM check passes vacuously | confirmed by reading: the assertion holds whenever the race does not occur, and round 6 measured it at about one writer in 250 | open |
-| 8.9 | UNPROVEN | MAJOR | Nothing asserts the manifest's floor | confirmed by execution: `engines.node` set to `>=20.0.0` against scripts declaring 18, and the suite still reports 158/158 | open |
-| 8.10 | MISPLACED | MAJOR | REQ-007 landed in three files, two outside scope | confirmed: `docs/README.md` and `skills/README.md` are added by the candidate and named by neither the placement row nor the scope | open |
-
-**8.7 is the same defect as 7.8, on the same requirement.** Round 7 found REQ-003's proof citing
-`cg_probe.js`, a file that never entered the repository; the repair replaced it with a citation to
-the committed suite, which does not carry that gate either. A second finding on one requirement goes
-to Plan whatever its class, and this one earns it: the requirement's proof has been wrong twice.
-
-**8.1 is a contradiction the round-7 repair introduced.** AC-001.4 was written to state the window
-between bumping the manifest and cutting the tag. AC-001.2 requires one artifact per version. Stating
-a violation as a criterion does not satisfy the criterion it violates.
-
-**8.5 and 8.6 are the honest shape of the release.** The installed tree *was* compared with the tag
-by hand — 49 of 49 files identical — and the comparison is in no proof row and in no job. A check
-that exists only in a transcript is the thing this skill exists to refuse.
-
-**8.2 is the first refuted finding in eight rounds.** Its verification step, run unchanged, returns
-no match: the scanner's fence is anchored and a three-backtick opening is not closed by two. The
-reviewer's own probe, visible in its transcript, had already returned `accepted: false` twice.
-
-## Round 9 — the round-8 repairs, before the tag
-
-Ran 2026-09-05 over `claude-code-route--v1.1.1..a7a9bdf`, the repair and nothing else, with the
-evidence taken from that revision's own CI run. **Nine findings, nine confirmed by executing their
-verification steps.** Three were BLOCKER.
-
-This is the first round in the project's history to run while its subject was still a candidate.
-
-| # | Class | Severity | Summary | Verified | Outcome |
-| --- | --- | --- | --- | --- | --- |
-| 9.1 | WRONG-PLAN | BLOCKER | There is no reviewed 1.1.2 artifact to tag, and REQ-001's row already claimed its ancestry | confirmed: three commits past the tag, `plugin.json` and `CHANGELOG.md` unchanged, and `git rev-list ...v1.1.2..main` exits 128 | AC-001.6 states what the tagged commit may differ by; the row no longer claims a tag that does not exist |
-| 9.2 | DEFECT | BLOCKER | The artifact comparison walked one way | confirmed: a file dropped from a simulated install left `differ=0` while 50 others remained | both sides walked, 53 against 53 with a floor on each |
-| 9.3 | DEFECT | MAJOR | The directory check skipped what ships | confirmed: `.claude-plugin` and `.github` are tracked and the install carried all 51 files; and an indented heading counted as 60 characters of prose | published means tracked and git is asked; a heading is a heading at any indentation; both directories now state their purpose |
-| 9.4 | UNPROVEN | BLOCKER | The proof rows cited a run that was not the candidate's | confirmed: rows cited `33930561278`, the receipt cited `33930715990` | repaired wrongly: the rows were pointed at a run of the revision then under review, and the candidate moved again. Round 10 found the same defect a third time; the rows now name a command that resolves against the tag rather than an identifier minted after the commit |
-| 9.5 | UNPROVEN | MAJOR | The floor assertions matched digits, not declarations | confirmed by execution: `<=18` passed, and so did a README reading "Node 18 is unsupported; use Node 20" | both match the exact declaration, and both counterexamples fail |
-| 9.6 | UNPROVEN | MAJOR | Node 18.0.0 was never run | confirmed: the matrix named the selector `18`, which resolves to the newest 18.x | the matrix names `18.0.0` too, green on all three platforms |
-| 9.7 | UNPROVEN | MAJOR | REQ-005 was marked pass while AC-005.2 admits it cannot be | confirmed by reading the row against the criterion | the row closes AC-005.1 and AC-005.3 and marks AC-005.2 open |
-| 9.8 | UNPROVEN | MAJOR | The scan of "the whole published tree" skipped `.github` | confirmed: the walker skips dot-prefixed entries, and the patch had just added two `.mjs` files there | the proof runs both paths; the second reports 0 and 0 |
-| 9.9 | MISPLACED | MAJOR | Three placements omitted homes the repairs created or relied on | confirmed by reading the table against the files | REQ-001, REQ-004 and REQ-007 name what they actually own |
-
-**9.1 is the shape of the problem, not a slip in it.** Every repair creates content the last round did
-not see, so a rule of "tag only what was reviewed" never terminates on its own. AC-001.6 ends the
-regress by bounding what the tagged commit may add: the version, the changelog and this plan's proof
-rows, nothing else. What CI proved at the reviewed commit is then what the tag carries.
-
-**9.4 is round 7's finding 7.15 returning on the author rather than the reviewer.** The proof rows
-were updated to a CI run, the candidate then moved, and the rows kept pointing at the older run. A
-freeze takes its evidence from the revision under review, and a revision that moves takes its
-evidence with it.
-
-**9.2 and the counting fix before it are the same defect twice.** The comparison was written, found
-to pass without comparing, given a count — and the count only proved one side of it. A check that
-walks a set and reports agreement proves nothing about what is not in that set.
-
-## Round 10 — the round-9 repairs, and the scheme meant to end the regress
-
-Ran 2026-09-05 over `a7a9bdf..00fc38a`. **Eight findings, eight confirmed by executing their
-verification steps.** Five were BLOCKER, and the reviewer was right about the one that mattered most:
-the scheme written to close the review-and-tag regress did not close it.
-
-| # | Class | Severity | Summary | Verified | Outcome |
-| --- | --- | --- | --- | --- | --- |
-| 10.1 | DEFECT | BLOCKER | The default branch carried a second tree named 1.1.1 | confirmed: six commits past the tag, both manifests reading 1.1.1, and the marketplace serves the branch | AC-001.7 written; **it did not stop the window reopening** — see 11.1 |
-| 10.2 | UNPROVEN | BLOCKER | The proof rows cited a run that was not the candidate's, a third time | confirmed: `33932657547` six times, `33932948856` none | the rows name a command resolving against the tag; no identifier minted after the commit appears in it |
-| 10.3 | DEFECT | BLOCKER | The round-9 history entry recorded the repair as the reviewed revision | confirmed: entry 30 carries `011a88e` where the round reviewed `a7a9bdf` | corrected by a later entry, the only way an append-only log can be corrected |
-| 10.4 | WRONG-PLAN | BLOCKER | AC-001.6 did not close the regress | confirmed: recording the review that authorises the tag is itself a change to the tree being tagged, and no command enforced the criterion | rewritten: the version is cut first, the round reviews that SHA, the tag points at it, and what a release produces about itself lands in the next one |
-| 10.5 | WRONG-PLAN | BLOCKER | T10 depended on T11 alone, so a criterion could stay open and ship | confirmed by reading the task table | T10 depends on every criterion being closed or waived, and the Waivers section exists |
-| 10.6 | UNPROVEN | MAJOR | The published-tree scan reached neither `.github` nor `.claude-plugin` | confirmed: the walker skips dot-prefixed entries and `.claude-plugin` scans 0 and 0 | the proof row names all three paths |
-| 10.7 | SCOPE | MAJOR | `.claude-plugin/README.md` landed outside the declared scope | confirmed: the scope permitted `plugin.json` alone | scope widened to the directory the placement already required |
-| 10.8 | DEFECT | MINOR | A README contradicted the directory it described | confirmed: "two manifests and nothing else" against three tracked files | corrected |
-
-**10.4 is the finding this round existed to produce.** AC-001.6 tried to bound what a tagged commit
-may add. The bound could not hold, because a release produces facts about itself -- a verdict, a CI
-run, a history entry -- that did not exist when the commit was written. The correction is not a
-tighter bound but a different order: cut the version, review that commit, tag it, and let the
-receipts land in the next release. A tag does not contain the record of its own review, and asking it
-to was the mistake.
-
-**10.1 had been live for six commits.** Repairs were pushed to the default branch while the manifest
-still read 1.1.1, and the marketplace serves the default branch, so every install during that window
-received a tree calling itself a version it was not. The rule that prevents it is AC-001.7 and it is
-about where work happens, not about care taken: the default branch is a publication channel, so work
-that is not a release belongs on a branch.
-
-**10.2 is 7.15 and 9.4 in the same clothes.** Three rounds, one defect: a document citing the CI run
-of its own commit cannot be right, because the run happens after the commit. Discipline had been
-applied to it twice and failed twice; what fixes it is that the citation no longer names an
-identifier at all.
+Nineteen adversarial rounds were run over this plan, and their records — the findings tables, how
+each was verified, and what it produced — are kept on the repository's `rounds` branch rather than
+on the default branch, because everything tracked there is what the marketplace serves. A plan
+governing a skill of three hundred and sixty-four lines had grown past seven hundred, almost all of
+it narrating its own history, and every finding from round 13 onward was in the release machinery
+or in the prose about it rather than in the skill. `git show rounds:release-1-1-0.md` reads them.
 
 ## Verdict
 
 **Delivered with gaps, and superseded by 1.1.1.**
 
 The seven findings this plan was written to close are closed, each by something that ran. Round 7 then
-found seventeen more, six of them BLOCKER, and every one confirmed by execution. Ten are against this
+found seventeen more, and its own generated line above says how each was checked. Ten are against this
 release and seven against the linter it ships; all are repaired or their criteria corrected, and the
 result is 1.1.1.
 
