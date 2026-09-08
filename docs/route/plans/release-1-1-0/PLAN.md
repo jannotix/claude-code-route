@@ -252,8 +252,8 @@ replaced guessing at one.
 | REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` runs the suite at 18.0.0 on all three platforms | pass |
 | REQ-005 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | AC-005.1 and AC-005.3 pass; **AC-005.2 waived, see Waivers** |
 | REQ-006 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — on each of the three operating systems the install job installed **this commit** from the checkout, ran `claude plugin details`, matched the whole line naming one skill and the whole line naming this commit's version, and ran the installed copy's suite. On the default branch it then reinstalls through the marketplace and matches the version again, which proves the channel; a branch push cannot prove the channel, because the marketplace serves the default branch | AC-006.1, AC-006.2 and the candidate half of AC-006.3 pass; **the marketplace half of AC-006.3 is open until publication**, see Waivers |
-| REQ-007 | `node tests/route-lint.test.mjs` — 9 checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
-| REQ-008 | `node tests/route-lint.test.mjs` — 28 checks import `.github/round-counts.mjs`, the file the workflow calls: how each row was checked read from its own cell rather than assumed, a closing fence carrying content, an escaped pipe, a row with no id, a repeated id, a second generated line, a qualifier between a number and its noun, an identifier that is not a count, and the failing branch with its exit code and the file it names. `$ node .github/round-counts.mjs .` reports 15 round sections across two plans, the counts each table produces, and no count stated anywhere else | pass |
+| REQ-007 | `node tests/route-lint.test.mjs` — 9 checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `.claude-plugin` at 572, `.github` at 1234, `docs` at 372, `evals` at 6813, `skills` at 431, `tests` at 798 characters | pass |
+| REQ-008 | `node tests/route-lint.test.mjs` — 28 checks import `.github/round-counts.mjs`, the file the workflow calls: how each row was checked read from its own cell rather than assumed, a closing fence carrying content, an escaped pipe, a row with no id, a repeated id, a second generated line, a qualifier between a number and its noun, an identifier that is not a count, and the failing branch with its exit code and the file it names. `$ node .github/round-counts.mjs .` reports 3 round sections across two plans, the counts each table produces, and no count stated anywhere else | pass |
 | NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — 0 errors and the 14 warnings the Adjudicated section rules on. The walker skips dot-prefixed entries, so `$ node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 .github .claude-plugin --layers domain,application,release` covers the three gate modules and the manifests the first pass cannot reach: 0 errors, 0 warnings | pass |
 | NFR-002 | The install job declares `timeout-minutes: 5`, so a run over the 300-second budget fails instead of being reported. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — the job's conclusion is the budget's verdict. A row that printed the durations asserted nothing about them: round 12 ran that command shape against a 361-second job and it exited 0 | pass |
 
@@ -273,11 +273,9 @@ that writes at the end discards every earlier change when a later assertion fire
 
 ## Gaps
 
-**Two requirements wait on a decision that is not the Planner's to take.** REQ-002 asks whether an
-address already present in every commit header should be removed from one file, and REQ-007 asks
-whether this repository's own cycle artifacts are a demonstration or clutter. Both are the
-requester's, both are recorded as open, and T1 and T3 are blocked until they are answered. Guessing
-either would be the failure this method exists to prevent.
+**REQ-002 and REQ-007 waited on decisions that were not the Planner's to take**, and both were
+taken: the history is published with attribution and `--no-operator` suppresses it, and
+`docs/route/` ships as a declared worked example. T1 and T3 record what was decided.
 
 **AC-005.2 closes probabilistically and cannot close otherwise.** The Windows lock defect appeared
 about once in 250 writers when round 6 measured it. The suite asserts that no writer failed outside
@@ -287,6 +285,20 @@ rather than raced against, and that is a change to `route-history` this release 
 
 **The round-6 repairs to the linter and the round-8 repairs to the capability fixture have not been
 attacked.** They are not part of this plan and do not block a release, but a release ships them.
+
+## What 1.1.3 shipped with
+
+Round 19 reviewed `7fb2b7b`. The tag `claude-code-route--v1.1.3` points at `b19f7d8`, which carries
+that round's repairs and the move of the round records off this branch, and was not itself reviewed.
+That was the requester's instruction, taken with the trade named. Eight of round 19's nine repairs
+reached it; the ninth, a stale count of commit headers in `docs/route/README.md`, did not, because
+the phrase wraps across two lines and the search that looked for it did not. It is repaired here.
+
+It is the fourth release in a row whose tagged commit no round had seen. Nor was it the first taken
+as a choice: the 1.1.2 tag object says that release was cut while round 13 was still running, on
+the same instruction. AC-001.6 describes the order that avoids it, and 1.1.4 is the first
+release to follow that order from the start: the version is cut first, the round reviews that commit,
+and the tag points at it.
 
 ## Waivers
 
@@ -317,7 +329,7 @@ sentence is the record of that decision.
 
 ## Rounds
 
-Nineteen adversarial rounds were run over this plan, and their records — the findings tables, how
+The adversarial rounds run over this plan left 13 records — the findings tables, how
 each was verified, and what it produced — are kept on the repository's `rounds` branch rather than
 on the default branch, because everything tracked there is what the marketplace serves. A plan
 governing a skill of three hundred and sixty-four lines had grown past seven hundred, almost all of

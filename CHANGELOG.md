@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-09-08
+
+The receipts 1.1.3 produced about itself, and the first release whose tagged commit a round has read.
+
+### Added
+
+- `HISTORY.jsonl` carries round 19's verdict and 1.1.3's delivery. A release produces facts about
+  itself — the round that reviewed it, the run that proved it, the entry that records it shipping —
+  that cannot be written into the commit they describe, because they do not exist when it is written.
+  They land here instead, which is what AC-001.6 asks and what the previous release could not do for
+  its own.
+
+### Changed
+
+- The plan says what 1.1.3 shipped with: round 19 reviewed `7fb2b7b` and the tag points at `b19f7d8`,
+  which carries eight of that round's nine repairs and was not itself reviewed. The ninth, a stale
+  count of commit headers, is repaired here: the phrase wraps across two lines and the search that
+  looked for it did not. Four releases in a row have had a tagged commit no round had seen, 1.1.2 and
+  1.1.3 both by instruction rather than by oversight, and this release is cut in the order that
+  prevents it.
+
+
 ## [1.1.3] - 2026-09-08
 
 The sixth round found three things in 1.1.2, all confirmed by executing their verification steps and
