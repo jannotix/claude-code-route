@@ -99,8 +99,8 @@ Every gate that closes and every verdict is appended to `HISTORY.jsonl`, through
 never by hand:
 
 ```bash
-node scripts/route-history.mjs append --event cycle.reviewed --model <this model's id> \
-  --slug <plan slug> --depth Standard --role reviewer --round 1 --reviewer codex \
+node scripts/route-history.mjs append --event cycle.reviewed --model "<this model's id>" \
+  --slug "<plan slug>" --depth Standard --role reviewer --round 1 --reviewer codex \
   --verdict delivered --confirmed 2 --refuted 1
 ```
 
@@ -342,8 +342,8 @@ reports, falling back to `.claude/skills/claude-code-route/scripts/`.
 
 ```bash
 node scripts/route-map.mjs .                          # MAP.md skeleton, no file bodies read
-node scripts/route-lint.mjs docs/route/plans/<slug> --stage plan          # at the Plan gate
-node scripts/route-lint.mjs docs/route/plans/<slug> src/                  # at the Review gate
+node scripts/route-lint.mjs docs/route/plans/"<slug>" --stage plan          # at the Plan gate
+node scripts/route-lint.mjs docs/route/plans/"<slug>" src/                  # at the Review gate
 node scripts/route-history.mjs verify                 # the chain is intact
 ```
 
@@ -360,5 +360,6 @@ everything.
 `--layers core,usecase,adapter` or as `{"layers": [...]}` in `route.config.json` in the working
 directory.
 
-`route-history` is the only writer among the three, it only ever appends, and it takes a lock while
+`route-history` is the only writer among the three, it only ever appends to the log — creating the
+log's parent directory if it is missing — and it takes a lock while
 it does: an append is read-then-write, and two agents appending at once would otherwise interleave.

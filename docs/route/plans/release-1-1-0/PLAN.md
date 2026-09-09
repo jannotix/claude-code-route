@@ -45,8 +45,15 @@ REQ-004  The runtime the scripts require must be declared and must fail clearly 
 
 REQ-005  Continuous integration must exercise every operating system the plugin is documented to support.
   AC-005.1  Given the CI workflow When its matrix is read Then it includes Linux, macOS and Windows
-  AC-005.2  Given the lock defect that returned `EPERM` on Windows and exit 1 When it is reintroduced Then the Windows job fails on the runs that hit the race. Round 6 measured the race at about one writer in 250, so one green run is not evidence the regression would be caught; this criterion closes probabilistically and the gap is named below
   AC-005.3  Given the matrix When it is read Then it includes the declared Node floor and the current LTS
+
+REQ-009  An append must not be lost, and must not hang, when the lock cannot be taken.
+  AC-009.1  Given `ROUTE_LOCK_FAULT` naming a code that means the lock is held When an append runs Then the acquisition is retried and the append succeeds, landing exactly one entry, carrying a marker only that append writes
+  AC-009.2  Given `ROUTE_LOCK_FAULT` naming any other code When an append runs Then it surfaces and no entry is appended
+  AC-009.3  Given `ROUTE_LOCK_FAULT` naming a held code suffixed `:always`, so the failure never clears When an append runs Then it reaches the ten-second deadline and exits 3, and it does so against a clock frozen at zero, because a deadline read from the wall clock never arrives if the clock stalls or steps back
+  AC-009.4  Given a lock this process owns and cannot remove When the append returned Then the command exits 0 and names the lock it left, because reporting a written entry as a failure makes the caller retry and write it twice; and When the append threw Then it says the lock was left without claiming an entry. A write that lands and then throws returns neither way and is counted as a failure, which is the limit named below rather than a case this criterion covers
+  AC-009.5  Given a history file addressed by one path When appends contend for it Then the lock beside that path is the only lock they take
+  Each of the five fails the suite when the line that satisfies it is removed, at the counts the mutation receipt records. What this lock does not do is named below, and what it does not do is not written here as though it did. This was AC-005.2 until round 21
 
 REQ-006  A release must be proven by installing it, not by inspecting it.
   AC-006.1  Given a clean environment When the marketplace is added and the plugin installed by the commands the README gives Then the install succeeds
@@ -90,6 +97,7 @@ NFR-002  Install cost: a first install and its verification complete in under 5 
 | REQ-003 | Nothing user-visible ships without a version heading | `.github/changelog-gate.mjs`, called by the workflow and exercised by the suite | release |
 | REQ-004 | The runtime floor is declared at each script's entry, in `README.md` and in the manifest's `engines.node`, and the five declarations are asserted equal | each script's preamble, `README.md`, `.claude-plugin/plugin.json`, checked by `tests/route-lint.test.mjs` | release |
 | REQ-005 | The matrix covers the platforms the README claims | `.github/workflows/checks.yml` | release |
+| REQ-009 | A failed lock acquisition is retried while the lock may be held, gives up when it is not, and never reports a written entry as lost | `withLock` | application |
 | REQ-006 | A release is proven by installing it, and by the CLI loading what was installed | `.github/workflows/checks.yml`, the install job's matrix | release |
 | REQ-008 | A round states its counts once, generated from its table | `.github/round-counts.mjs`, called by the workflow and exercised by the suite | release |
 | REQ-007 | Every top-level published directory declares its purpose | a `README.md` in each of `.claude-plugin/`, `.github/`, `docs/`, `evals/`, `skills/` and `tests/`, plus `docs/route/README.md`, reported by `.github/published-dirs.mjs`, which the workflow calls | release |
@@ -137,7 +145,7 @@ INV-002  The history chain verifies, and any deliberate rewrite of it is recorde
 
 ## Scope
 
-    .claude-plugin/**, .github/**, CHANGELOG.md, README.md, SECURITY.md, docs/**, skills/README.md, skills/claude-code-route/scripts/**, tests/**
+    .claude-plugin/**, .github/**, CHANGELOG.md, README.md, SECURITY.md, docs/**, skills/README.md, skills/claude-code-route/SKILL.md, skills/claude-code-route/references/**, skills/claude-code-route/scripts/**, tests/**
 
 ## Out of scope
 
@@ -246,16 +254,17 @@ replaced guessing at one.
 
 | Requirement | Proof | Result |
 | --- | --- | --- |
-| REQ-001 | **AC-001.2, AC-001.4 and AC-001.6 are pending T10**: each asks something of the release tag, and no tag exists before it is cut. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — the install job hashed every installed file against `GITHUB_SHA` and walked every tracked file back the other way; none differed and none was missing from either side. The revision expression is quoted because PowerShell otherwise reads `{commit}` as `-encodedCommand` and git returns the tag's parent at exit 128 -- a wrong SHA of the right shape | AC-001.3 and AC-001.5 pass; AC-001.2, AC-001.4 and AC-001.6 pending T10; **the marketplace half of AC-001.1 is open until publication**, see Waivers |
+| REQ-001 | **AC-001.2, AC-001.4 and AC-001.6 are pending T10**: each asks something of the release tag, and no tag exists before it is cut. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v2.0.0^{commit}')" --json name,conclusion` — the install job hashed every installed file against `GITHUB_SHA` and walked every tracked file back the other way; none differed and none was missing from either side. The revision expression is quoted because PowerShell otherwise reads `{commit}` as `-encodedCommand` and git returns the tag's parent at exit 128 -- a wrong SHA of the right shape | AC-001.3 and AC-001.5 pass; AC-001.2, AC-001.4 and AC-001.6 pending T10; **the marketplace half of AC-001.1 is open until publication**, see Waivers |
 | REQ-002 | `node tests/route-lint.test.mjs` — "an operator is recorded by default", "--no-operator omits the field entirely", "the chain verifies with the field omitted" | pass |
 | REQ-003 | `node tests/route-lint.test.mjs` — six checks import `.github/changelog-gate.mjs`, the file the workflow calls, and run it both ways: exit 1 naming the first unreleased line, exit 0 once that entry sits under a version heading. Gutting the gate to return nothing fails two of them | pass |
-| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` runs the suite at 18.0.0 on all three platforms | pass |
-| REQ-005 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | AC-005.1 and AC-005.3 pass; **AC-005.2 waived, see Waivers** |
-| REQ-006 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — on each of the three operating systems the install job installed **this commit** from the checkout, ran `claude plugin details`, matched the whole line naming one skill and the whole line naming this commit's version, and ran the installed copy's suite. On the default branch it then reinstalls through the marketplace and matches the version again, which proves the channel; a branch push cannot prove the channel, because the marketplace serves the default branch | AC-006.1, AC-006.2 and the candidate half of AC-006.3 pass; **the marketplace half of AC-006.3 is open until publication**, see Waivers |
-| REQ-007 | `node tests/route-lint.test.mjs` — 9 checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `docs`, `evals`, `skills` and `tests` at 372, 6920, 431 and 798 characters | pass |
-| REQ-008 | `node tests/route-lint.test.mjs` — 28 checks import `.github/round-counts.mjs`, the file the workflow calls: how each row was checked read from its own cell rather than assumed, a closing fence carrying content, an escaped pipe, a row with no id, a repeated id, a second generated line, a qualifier between a number and its noun, an identifier that is not a count, and the failing branch with its exit code and the file it names. `$ node .github/round-counts.mjs .` reports 15 round sections across two plans, the counts each table produces, and no count stated anywhere else | pass |
+| REQ-004 | `node tests/route-lint.test.mjs` — all three scripts refuse a runtime reporting 16.20.2, exit 2, message naming Node 18; the five declarations are asserted equal against the exact strings, and both of round 9's counterexamples — `engines.node` of `<=18`, a README reading "Node 18 is unsupported; use Node 20" — fail the check. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v2.0.0^{commit}')" --json name,conclusion` runs the suite at 18.0.0 on all three platforms | pass |
+| REQ-005 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v2.0.0^{commit}')" --json name,conclusion` — twelve matrix jobs green across Linux, macOS and Windows at Node 18.0.0, 18, 22 and 24 | pass |
+| REQ-009 | `node tests/route-lint.test.mjs` — the lock path is driven by injecting the failure rather than racing it, and every claim is removed in turn against 230 passing checks: narrowing the held set to `EEXIST` fails 9 at 221/230, removing the guard that lets an unexpected code surface fails 3 at 227/230, putting the deadline back on the wall clock fails 1 at 229/230, leaving the cleanup unguarded fails 3 at 227/230, moving the lock off the path it guards fails 3 at 227/230, removing the separator that keeps an entry on a line of its own fails 2 at 228/230, and claiming a write before it happened fails 1 at 229/230. The nine are not nine independent proofs: four of them reach the deadline by injecting `EPERM:always`, so they fall for a reason of their own. The concurrency check is a predicate rather than a line of the script and no mutation settles it: it read `rows.length === WRITERS || exitCodes.every(...)`, true whenever no writer failed, and its first repair compared totals, which cannot tell one writer appending twice from another appending nothing. It compares every writer that succeeded against the file now, and is settled by running all three forms against twelve writers all exiting 0 with one model duplicated and one missing: true, true, false | pass |
+| REQ-006 | `$ gh run list --commit "$(git rev-parse 'claude-code-route--v2.0.0^{commit}')" --json name,conclusion` — on each of the three operating systems the install job installed **the commit that tag names** from the checkout, ran `claude plugin details`, matched the whole line naming one skill and the whole line naming this commit's version, and ran the installed copy's suite. On the default branch it then reinstalls through the marketplace and matches the version again, which proves the channel; a branch push cannot prove the channel, because the marketplace serves the default branch | AC-006.1, AC-006.2 and the candidate half of AC-006.3 pass; **the marketplace half of AC-006.3 is open until publication**, see Waivers |
+| REQ-007 | `node tests/route-lint.test.mjs` — 9 checks import `.github/published-dirs.mjs`, the file the workflow calls, over a tree whose READMEs are empty or headings-only: exit 1 naming each, exit 0 once both state a purpose. Dropping the floor to zero fails three of them. `$ node .github/published-dirs.mjs .` reports `.claude-plugin` at 572, `.github` at 1234, `docs` at 372, `evals` at 6813, `skills` at 431, `tests` at 798 characters | pass |
+| REQ-008 | `node tests/route-lint.test.mjs` — 28 checks import `.github/round-counts.mjs`, the file the workflow calls: how each row was checked read from its own cell rather than assumed, a closing fence carrying content, an escaped pipe, a row with no id, a repeated id, a second generated line, a qualifier between a number and its noun, an identifier that is not a count, and the failing branch with its exit code and the file it names. `$ node .github/round-counts.mjs .` reports 3 round sections across two plans, the counts each table produces, and no count stated anywhere else | pass |
 | NFR-001 | `node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 . --layers domain,application,release --json` — 0 errors and the 14 warnings the Adjudicated section rules on. The walker skips dot-prefixed entries, so `$ node skills/claude-code-route/scripts/route-lint.mjs docs/route/plans/release-1-1-0 .github .claude-plugin --layers domain,application,release` covers the three gate modules and the manifests the first pass cannot reach: 0 errors, 0 warnings | pass |
-| NFR-002 | The install job declares `timeout-minutes: 5`, so a run over the 300-second budget fails instead of being reported. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v1.1.3^{commit}')" --json name,conclusion` — the job's conclusion is the budget's verdict. A row that printed the durations asserted nothing about them: round 12 ran that command shape against a 361-second job and it exited 0 | pass |
+| NFR-002 | The install job declares `timeout-minutes: 5`, so a run over the 300-second budget fails instead of being reported. `$ gh run list --commit "$(git rev-parse 'claude-code-route--v2.0.0^{commit}')" --json name,conclusion` — the job's conclusion is the budget's verdict. A row that printed the durations asserted nothing about them: round 12 ran that command shape against a 361-second job and it exited 0 | pass |
 
 **What the matrix found on its first run, which is why REQ-005 exists.** Six jobs, and two failed:
 macOS at both Node versions, on the step that proves the history detects an edited entry. `sed -i`
@@ -273,31 +282,171 @@ that writes at the end discards every earlier change when a later assertion fire
 
 ## Gaps
 
-**Two requirements wait on a decision that is not the Planner's to take.** REQ-002 asks whether an
-address already present in every commit header should be removed from one file, and REQ-007 asks
-whether this repository's own cycle artifacts are a demonstration or clutter. Both are the
-requester's, both are recorded as open, and T1 and T3 are blocked until they are answered. Guessing
-either would be the failure this method exists to prevent.
-
-**AC-005.2 closes probabilistically and cannot close otherwise.** The Windows lock defect appeared
-about once in 250 writers when round 6 measured it. The suite asserts that no writer failed outside
-the contract, which holds on every run the race does not occur, so a green Windows job is consistent
-with the regression being present. Closing this needs the lock acquisition injected with a fault
-rather than raced against, and that is a change to `route-history` this release does not make.
+**REQ-002 and REQ-007 waited on decisions that were not the Planner's to take**, and both were
+taken: the history is published with attribution and `--no-operator` suppresses it, and
+`docs/route/` ships as a declared worked example. T1 and T3 record what was decided.
 
 **The round-6 repairs to the linter and the round-8 repairs to the capability fixture have not been
 attacked.** They are not part of this plan and do not block a release, but a release ships them.
 
+## What 1.1.3 shipped with
+
+Round 19 reviewed `7fb2b7b`. The tag `claude-code-route--v1.1.3` points at `b19f7d8`, which carries
+that round's repairs and the move of the round records off this branch, and was not itself reviewed.
+That was the requester's instruction, taken with the trade named. Eight of round 19's nine repairs
+reached it; the ninth, a stale count of commit headers in `docs/route/README.md`, did not, because
+the phrase wraps across two lines and the search that looked for it did not. It is repaired here.
+
+The 1.1.3 tag object also says round 19's nine findings were all confirmed by executing. The round's
+own generated counts say eight were, and one does not say which. The tag object cannot be corrected,
+so the discrepancy is recorded rather than repaired: `git cat-file -p refs/tags/claude-code-route--v1.1.3`
+against `git show rounds:release-1-1-0.md` shows both figures. It is the same fault the counts
+generator exists to prevent, written into the one artifact the generator does not cover.
+
+It is the fourth release in a row whose tagged commit no round had seen. Nor was it the first taken
+as a choice: the 1.1.2 tag object says that release was cut while round 13 was still running, on
+the same instruction. AC-001.6 describes the order that avoids it, and 2.0.0 is the first release
+to follow that order from the start: the version is cut first, the round reviews that commit, and the
+tag points at it. 1.1.4 was cut and never tagged; `788559f` is a sibling of this candidate, not an
+ancestor of it, and no release names it.
+
+## What this lock does not do
+
+`withLock` takes a directory beside the log, waits, and gives up. Five rounds attacked what it
+promises, and each of them found the promise larger than the mechanism. What it holds is above; what
+it does not hold is here, with the round that measured it.
+
+**It does not decide that a holder has died.** Until round 22 it did, from the lock directory's
+mtime: one older than thirty seconds was removed and the wait restarted. Three of that round's
+findings lived in those five lines. mtime cannot tell a dead holder from a slow one, so an append
+that outlived the window had its lock deleted underneath it and a second writer entered the file;
+the removal was unguarded, so a lock that could not be deleted surfaced as an uncaught `EPERM`; and
+the restart reached the top of the loop without passing the deadline. A lock left behind by a crash
+now stays until somebody removes it, which is what the message the command prints has always said.
+
+**It guards a path, not a file.** One log addressed by two paths — a hard link, a symlink, a mapped
+drive — has two locks and both writers append: round 23 measured an append through a hard link
+succeeding in 0.7 seconds while the other name's lock was held. Round 23 named the lock after the
+log's device and inode to close that and did not: the lock still sits beside the file, so one inode
+reached from two directories still has two of them, which round 24 measured at 0.4 seconds. Moving
+the lock away from the log to a fixed place would close it and trade a lock anyone can find beside
+the file for one nobody can. Give a history file one path.
+
+Two things about that attempt are worth keeping. The checks written for the finding asserted the case
+the finding described and passed while the property was false, because they derived the lock's name
+the way the implementation derived it — a check that encodes the implementation agrees with a wrong
+one. And the regression it introduced was caught by concurrency checks that were already there, on
+ext4, from the third of the three working directories CI uses, never on Windows, where all five jobs
+stayed green.
+
+**The deadline bounds waiting, not the filesystem.** It is read before `mkdirSync` and checked after,
+so an acquisition that blocks — an unresponsive network share, a mapped drive that stops answering —
+never reaches it. Node offers no interruptible directory creation, so the ten seconds are a bound on
+contention, not on the operating system. Round 25 measured it by blocking the call: the process had
+to be killed.
+
+**A write that fails after its bytes land leaves the entry.** `appendFileSync` can put the line in
+the file and still throw, and the command reports a failure. A caller that retries then writes the
+entry twice, and the chain verifies both, because each is correctly linked to the one before it:
+round 25 measured exactly that, two entries and a valid chain for one logical append. Nothing in a
+synchronous append can tell the two apart. An operator who sees a failure and a fresh entry has both
+facts; the log is append-only and the duplicate stays visible.
+
+**It creates the log's parent directory before it takes the lock.** `mkdirSync(dirname(file),
+{ recursive: true })` runs first, so a rejected append can leave a directory that did not exist.
+Round 25 measured it: `ENOSPC` injected, exit 1, no log and no lock, and the parent there.
+
+
+## What rounds 27 to 30 found, and this release does not repair
+
+Four rounds attacked what `route-history` trusts about what it reads and writes, and found ten,
+eight, ten and ten things. Each round's repairs were where the next round found most of its own
+findings, and rounds 29 and 30 found three repairs that broke what 1.1.3 does correctly: an option
+given twice with the same value, a timestamp in years 0000 to 0099, and `--round +1`. Repairing this
+class inside a release was costing more than it returned, so the script is the one round 27 reviewed
+and these stay open, each with what measured it.
+
+**A log is extended past a line this script cannot use.** `read` marks a line unreadable only when
+`JSON.parse` throws, and an unreadable line is still counted when the next sequence number is
+chosen. A file holding `{broken`, or holding `42` — which parses — takes an append that exits 0, and
+`verify` then reports a break on a history that was whole. Rounds 27 and 29.
+
+**Values the fields cannot hold are recorded as though they could.** `--ts not-an-iso-date` is
+written verbatim; `--ts 2026-02-29` is stored as given and read back as March 1st; `--round
+not-a-number` becomes `null`; `--confirmed -1` becomes a negative count; four hundred digits become
+`Infinity`, which JSON writes as `null`. Each exits 0 and verifies as sound. Rounds 27 and 29.
+
+**An option present with no value falls back to its default.** `append --file --event cycle.planned
+--model m` writes the default history into the working directory rather than refusing a malformed
+invocation, and a second occurrence with nothing after it is invisible to `indexOf`. Rounds 27 and
+28.
+
+**A write that fails after its bytes have landed leaves the entry and reports a failure.** A caller
+that retries writes it twice, and the chain verifies both, because each is correctly linked to the
+one before it. Measured in round 25 and again in round 27, which also showed the command could tell
+the two apart: it holds the lock, and knows both the file's length before the call and the bytes it
+meant to write. Round 27.
+
+**A directory that will not allow the lock is reported as another append in progress.** `EPERM` and
+`EACCES` mean contention only when there is a lock to contend for; with none present the command
+still waits ten seconds and names a holder that cannot exist. Round 27. Round 29 then showed that
+telling the two apart by counting attempts calls three writers releasing in a row a refusal, and
+loses the append — so this is not a repair to make quickly.
+
+**Nothing keeps a shell example runnable.** Rounds 21 and 22 repaired five lines that stop at their
+first placeholder, and those repairs are in this release. The check that would catch the class
+returning is not: rounds 28, 29 and 30 each found it flagging commands that run, or missing ones
+that do not. Round 22 for the class, 28 to 30 for the check.
+
+**Two figures about proof are weaker than they read.** The deadline check accepts any wait from the
+deadline to half again as long, so a change to the polling interval alone satisfies it; and AC-004.2
+asks for a measurement against runtimes older than the floor, where what runs is the guard against a
+reported version. Rounds 27 and 29.
+
+## What Claude Code does not offer
+
+Two things this plan cannot close are properties of the host rather than of this plugin, and both
+were measured rather than assumed.
+
+**The marketplace installs from the default branch, not from a tag.** `claude plugin marketplace add`
+takes a repository and serves whatever its default branch holds; there is no way to ask it for a tag.
+Every commit pushed to that branch is therefore a publication, and a version string on it identifies
+whatever tree is there at the time rather than the tree its tag names. This is what carried 1.1.2's
+defect to anyone who installed during that window. The defect itself was not the host's: a version was
+bumped and repairs were pushed under it without a tag, and then a different tree was force-pushed under
+the same name. AC-001.7 is the rule that answers it — work that is not a release belongs on a branch —
+and the host property is why that rule has to exist at all.
+
+**`claude plugin eval` is in early access.** Running it on this account prints
+`plugin eval is currently in early access` and does nothing else, so the three cases in `evals/` are
+measured by hand and the suite checks only that they are well formed and that every file they name
+exists. Nothing in this repository unblocks it.
+
 ## Waivers
 
 A criterion here is closed by execution or it is waived in writing, and T10 depends on that being
-true of every one of them. There are three.
+true of every one of them. There are four: three halves that only the default branch can prove, and AC-001.7, which only the default branch can break. A fifth was AC-005.2, which round 21 found placed in a requirement about CI; it is REQ-009 now, and closed by execution rather than waived.
+AC-006.4, which round 24 found neither closed nor waived. A fourth was AC-005.2, which round 21
+found placed in a requirement about CI; it is REQ-009 now, and closed by execution rather than
+waived.
 
 **AC-001.1's marketplace half — open at the tag, for the same reason.** The criterion asks that the
 copy the marketplace installs and the matching tag be identical. The comparison that proves it runs
 on the default branch, because that is the only place the marketplace can serve this commit. The
 candidate install proves the artifact against its own SHA on every push; the channel is proven at
 publication and read by the next release's round.
+
+**AC-001.7 — a rule about what may land, which only the default branch can break.** Work that is
+not a release belongs on a branch, and nothing here can enforce that from a branch: the commit that
+would break it is the one that lands. What holds it is the ordering AC-001.6 describes and the record
+every release leaves. Round 29 found it neither proven nor waived.
+
+**AC-006.4 — open at the tag, for the reason AC-001.1 and AC-006.3 are.** The criterion asks that
+`claude plugin details` report the version the default branch publishes. The default branch publishes
+1.1.3 until this release lands on it, so the criterion cannot be true of a candidate on a branch: the
+job that would prove it is conditional on the default branch and does not run here. The install jobs
+prove the CLI loads the candidate and reports 2.0.0 from the checkout on all three operating systems;
+the marketplace half closes one push after the tag, and the receipt lands in the next release.
 
 **AC-006.3's marketplace half — open at the tag, closed one push later.** A marketplace serves the
 default branch, so it cannot serve a commit that has not been published: no ordering makes that half
@@ -306,18 +455,10 @@ The marketplace half runs on the first push of this commit to the default branch
 that publishes it, and the next release's round reads that run. This is a waiver in the sense that
 the tag is cut with the criterion half-open, and it is not a gap that any amount of care would close.
 
-**AC-005.2 — the Windows lock regression is not detected deterministically.** Round 6 measured the
-race at about one writer in 250. The suite asserts that no writer failed outside the contract, which
-holds on every run the race does not occur, so twelve green matrix jobs are consistent with the
-defect being present. Closing it needs the lock acquisition given an injected fault rather than a
-raced one, which is a change to `route-history` that no requirement in this plan asks for. The
-release ships with the regression undetected by construction rather than by oversight, and this
-sentence is the record of that decision.
-
 
 ## Rounds
 
-Nineteen adversarial rounds were run over this plan, and their records — the findings tables, how
+The adversarial rounds run over this plan left 13 records — the findings tables, how
 each was verified, and what it produced — are kept on the repository's `rounds` branch rather than
 on the default branch, because everything tracked there is what the marketplace serves. A plan
 governing a skill of three hundred and sixty-four lines had grown past seven hundred, almost all of

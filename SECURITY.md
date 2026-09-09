@@ -11,9 +11,22 @@ account, no network call of its own, and no dependencies.
 | --- | --- | --- | --- |
 | `route-lint.mjs` | The plan and the source paths you pass it | Nothing | Nothing |
 | `route-map.mjs` | Directory metadata, file sizes, manifests | Nothing | `git log`, `git rev-parse` |
-| `route-history.mjs` | The history file, and your git identity — see below | Appends to the history file | `git config`, `git rev-parse` |
+| `route-history.mjs` | The history file, and your git identity — see below | Appends to the history file, and creates its parent directory if it is missing | `git config`, `git rev-parse` |
 
-### Your identity in the history file
+### An environment variable the suite sets
+
+`ROUTE_LOCK_FAULT` makes a lock acquisition in `route-history append` fail with the error code it
+names; `<code>:always` makes every acquisition fail. It exists so a test can drive the Windows lock
+path that a race reaches about once in 250 writers, and it does nothing unless set.
+
+Setting it is not free. A code that means the lock is held costs one retry and the append then
+succeeds. Any other code surfaces: the append does not happen and the command exits non-zero.
+`:always` repeats whichever of those two happens: a held code waits out the ten-second timeout
+and exits 3, any other code still surfaces at once. None of them can
+corrupt the file, because nothing is written until the lock is taken the way the normal path takes
+it.
+
+## Your identity in the history file
 
 `route-history append` reads `git config user.name` and `user.email` and writes them into the
 entry as `actor.operator`. That file is meant to be committed, and many projects publish it. The
@@ -23,7 +36,7 @@ append rather than after.
 To keep it out:
 
 ```bash
-node scripts/route-history.mjs append --event cycle.planned --model <id> --no-operator
+node scripts/route-history.mjs append --event cycle.planned --model "<id>" --no-operator
 ```
 
 `ROUTE_NO_OPERATOR=1` in the environment does the same for a whole session or a CI job. The field

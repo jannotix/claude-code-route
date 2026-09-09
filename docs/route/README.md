@@ -19,15 +19,15 @@ code, and a count that nobody had counted.
 
 `HISTORY.jsonl` carries the author's git identity in every entry, and that is deliberate. The point
 of the file is that it says *who* acted rather than that "an agent" did, and publishing it with the
-attribution intact is the honest form of that claim. The same address is in all thirteen commit
-headers of this repository, so nothing is disclosed here that the commit log does not already say.
+attribution intact is the honest form of that claim. The same address is in every commit
+header of this repository, so nothing is disclosed here that the commit log does not already say.
 
 **Your own history is a different question, and the answer is yours.** When you run
 `route-history append` in your repository it reads `git config user.name` and `user.email` and writes
 them into a file you will commit — and may publish. If you would rather it did not:
 
 ```bash
-node scripts/route-history.mjs append --event cycle.planned --model <id> --no-operator
+node scripts/route-history.mjs append --event cycle.planned --model "<id>" --no-operator
 ```
 
 or set `ROUTE_NO_OPERATOR=1` for a whole session or a CI job. The field is omitted entirely and the

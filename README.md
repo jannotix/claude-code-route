@@ -182,7 +182,7 @@ verdict, recording **which model acted**, when, under which operator identity, o
 which revision.
 
 ```bash
-node scripts/route-history.mjs append --event cycle.reviewed --model claude-opus-5 \
+node scripts/route-history.mjs append --event cycle.reviewed --model "<this model's id>" \
   --slug invoice-credit-notes --depth Standard --role reviewer --round 1 \
   --reviewer codex --verdict delivered --confirmed 2 --refuted 1
 ```

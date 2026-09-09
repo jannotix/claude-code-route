@@ -1,7 +1,7 @@
 // Internal tests for scripts/route-lint.mjs and scripts/route-map.mjs. Not part of the skill.
 //   node route-lint.test.mjs
 
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -320,13 +320,39 @@ const check = (name, ok, detail = '') => {
 {
   const dir = mkdtempSync(join(tmpdir(), 'route-history-held-'));
   const log = join(dir, 'HISTORY.jsonl');
-  mkdirSync(`${log}.lock`);
+  const held = `${log}.lock`;
+  mkdirSync(held);
 
   const r = run(history, ['append', '--file', log, '--event', 'cycle.planned',
     '--model', 'm', '--operator', 'ci', '--ts', '2026-01-01T00:00:00+00:00']);
 
   check('a held lock exits 3, not 1', r.code === 3, `exit ${r.code}: ${r.out}`);
-  check('a held lock says which file is held', /is held/.test(r.err), r.err);
+  check('a held lock names the log and the directory holding it',
+    /is locked by/.test(r.err) && r.err.includes(log) && r.err.includes(held), r.err);
+
+  rmSync(dir, { recursive: true, force: true });
+}
+
+// A log whose last line has no newline is one this script parses and `verify` accepts. Appending to
+// it must not put two objects on one physical line. (INV-002)
+{
+  const dir = mkdtempSync(join(tmpdir(), 'route-history-nonl-'));
+  const log = join(dir, 'HISTORY.jsonl');
+  const append = (model) => run(history, ['append', '--file', log, '--event', 'cycle.planned',
+    '--model', model, '--no-operator', '--ts', '2026-01-01T00:00:00+00:00']);
+
+  append('first');
+  writeFileSync(log, readFileSync(log, 'utf8').replace(/\n$/, ''));
+  check('a log whose last line has no newline still verifies',
+    run(history, ['verify', '--file', log]).code === 0);
+
+  const second = append('second');
+  const physical = readFileSync(log, 'utf8').split('\n').filter((l) => l.trim() !== '');
+  check('appending to it succeeds', second.code === 0, `exit ${second.code}: ${second.err}`);
+  check('and puts the entry on a line of its own', physical.length === 2, String(physical.length));
+  check('and the chain still verifies',
+    run(history, ['verify', '--file', log]).code === 0,
+    run(history, ['verify', '--file', log]).err);
 
   rmSync(dir, { recursive: true, force: true });
 }
@@ -358,9 +384,15 @@ const check = (name, ok, detail = '') => {
     run(history, ['verify', '--file', log]).code === 0);
   check('no lock directory is left behind',
     !readdirSync(dir).some((n) => n.endsWith('.lock')), readdirSync(dir).join());
+  const won = exitCodes.filter((c) => c === 0).length;
+  const gaveUp = exitCodes.filter((c) => c === 3).length;
   check('a writer that gave up did so loudly, not silently',
-    rows.length === WRITERS || exitCodes.every((c) => c === 0 || c === 3),
-    `${rows.length} of ${WRITERS} landed, exits ${exitCodes.join()}`);
+    won + gaveUp === WRITERS && rows.length === won,
+    `${rows.length} landed, ${won} exited 0, ${gaveUp} exited 3, exits ${exitCodes.join()}`);
+  const landed = rows.map((e) => e.actor.model).sort();
+  const winners = exitCodes.map((c, i) => (c === 0 ? `m${i}` : null)).filter(Boolean).sort();
+  check('every writer that succeeded is in the file exactly once',
+    landed.join() === winners.join(), `landed ${landed.join()}; succeeded ${winners.join()}`);
 
   // Round 6 found this failing about one writer in 250: Windows raises EPERM, not EEXIST,
   // when two processes touch the lock directory at the same instant, and the catch treated
@@ -1036,6 +1068,164 @@ src/
   const r = run(counts, [join(here, '..')]);
   check('every round in this repository carries the counts its table produces', r.code === 0,
     `exit ${r.code}: ${r.err.trim()}`);
+}
+
+
+// AC-005.2 asked that reintroducing the Windows lock defect make the job fail. The race that defect
+// rides on was measured at about one writer in 250, so a green run proves nothing about it: the
+// acquisition is made to fail on purpose instead. (REQ-009, AC-009.3)
+{
+  const LOCK_DEADLINE_MS = 10000;  // LOCK_TIMEOUT_MS in route-history.mjs
+  const dir = mkdtempSync(join(tmpdir(), 'route-fault-'));
+  const log = join(dir, 'HISTORY.jsonl');
+  const rowsIn = (f) => (existsSync(f) ? readFileSync(f, 'utf8').trim().split('\n').filter(Boolean) : []);
+  const append = (env, timeout, slug = 's') => {
+    const opts = {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...env }, timeout,
+    };
+    try {
+      return { code: 0, out: execFileSync(process.execPath,
+        [history, 'append', '--event', 'cycle.planned', '--model', 'test', '--slug', slug,
+          '--depth', 'Light', '--role', 'planner', '--file', log], opts), err: '' };
+    } catch (e) {
+      return { code: e.status, out: e.stdout ?? '', err: e.stderr ?? '' };
+    }
+  };
+
+  const clean = append({});
+  check('an append with no fault injected succeeds', clean.code === 0,
+    `exit ${clean.code}: ${clean.err.trim()}`);
+
+  for (const code of ['EPERM', 'EACCES', 'EEXIST']) {
+    const before = rowsIn(log).length;
+    const r = append({ ROUTE_LOCK_FAULT: code }, undefined, `retried-${code}`);
+    const rows = rowsIn(log);
+    check(`a lock acquisition failing with ${code} is retried, not fatal`,
+      r.code === 0, `exit ${r.code}: ${r.err.trim()}`);
+    // Counting the total at the end cannot tell one append that ran twice from another that never
+    // ran at all. Each is counted here, and carries a slug nothing else writes.
+    check(`the ${code} retry appended exactly one entry, and it is that append's`,
+      rows.length === before + 1 && JSON.parse(rows[rows.length - 1]).change.slug === `retried-${code}`,
+      `${before} -> ${rows.length}`);
+  }
+
+  // A code that does not mean "somebody else holds it" is not swallowed: it is a real error and it
+  // must still surface rather than being retried until the deadline.
+  const beforeOther = rowsIn(log).length;
+  const other = append({ ROUTE_LOCK_FAULT: 'ENOSPC' });
+  check('a code that does not mean held is not retried away',
+    other.code !== 0 && /ENOSPC/.test(other.err), `exit ${other.code}: ${other.err.trim()}`);
+  check('and it wrote nothing', rowsIn(log).length === beforeOther, String(rowsIn(log).length));
+
+  // Retrying a failure that clears is half the contract. The other half is a failure that never
+  // clears: it has to reach the ten-second deadline and exit 3. Restarting the loop without passing
+  // the deadline spun instead, and no run of the tests above could tell the difference, because
+  // every fault they inject clears on the second try. This one does not. (REQ-009, AC-009.3)
+  const started = Date.now();
+  const stuck = append({ ROUTE_LOCK_FAULT: 'EPERM:always' }, LOCK_DEADLINE_MS * 2);
+  const waited = Date.now() - started;
+  check('an acquisition that keeps failing exits rather than spinning',
+    stuck.code === 3, `exit ${stuck.code} after ${waited}ms: ${stuck.err.trim()}`);
+  const declared = /LOCK_TIMEOUT_MS = (\d+)/.exec(readFileSync(history, 'utf8'));
+  check('the deadline these checks assume is the one the script enforces',
+    declared !== null && Number(declared[1]) === LOCK_DEADLINE_MS, String(declared && declared[1]));
+  check('it exits by the lock deadline, not before it and not never',
+    waited >= LOCK_DEADLINE_MS && waited < LOCK_DEADLINE_MS + 5000, `${waited}ms`);
+  check('it says which lock it waited on', /is locked by .*another append is in progress/s.test(stuck.err),
+    stuck.err.trim());
+
+  const rows = rowsIn(log);
+  check('the counted appends are all that is in the file', rows.length === 4, String(rows.length));
+
+  check('the chain verifies across them',
+    run(history, ['verify', '--file', log]).code === 0);
+
+  // AC-009.3 asks that the wait end. It ended against a clock that advances; a clock that stalls or
+  // steps back is the case where a deadline built on wall time never arrives, so this freezes
+  // Date.now in a child and asks for the same exit. (REQ-009)
+  const frozen = `
+    process.argv = [process.execPath, 'route-history.mjs', 'append', '--event', 'cycle.planned',
+      '--model', 'test', '--file', ${JSON.stringify('frozen.jsonl')}];
+    Date.now = () => 0;
+    await import(${JSON.stringify(pathToFileURL(history).href)});
+  `;
+  const froze = spawnSync(process.execPath, ['--input-type=module', '--eval', frozen], {
+    encoding: 'utf8', cwd: dir, timeout: LOCK_DEADLINE_MS * 2,
+    env: { ...process.env, ROUTE_LOCK_FAULT: 'EPERM:always' },
+  });
+  check('the deadline does not depend on the wall clock',
+    froze.status === 3 && !froze.signal, `exit ${froze.status} signal ${froze.signal}`);
+
+  // AC-009.4. A directory holding an open handle cannot be removed on Windows, which is where the
+  // lock codes this file injects come from. The entry is on disk by then: reporting the failure to
+  // clean up as a failed append makes the caller retry and write it twice.
+  if (process.platform === 'win32') {
+    const target = join(dir, 'cleanup.jsonl');
+    const cleanupLock = `${target}.lock`;
+    const squat = 'const fs=require(\'node:fs\');const L=process.argv[1];const end=Date.now()+20000;'
+      + 'const nap=(ms)=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);'
+      + 'while(!fs.existsSync(L)&&Date.now()<end)nap(1);'
+      + 'try{process.chdir(L);nap(5000)}catch{}';
+    const squatter = spawn(process.execPath, ['-e', squat, cleanupLock], { stdio: 'ignore' });
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 700);
+    const r = spawnSync(process.execPath,
+      [history, 'append', '--event', 'cycle.planned', '--model', 'test', '--file', target],
+      { encoding: 'utf8', timeout: LOCK_DEADLINE_MS * 2 });
+    squatter.kill();
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    const left = existsSync(cleanupLock);
+    check('a cleanup that cannot remove the lock still reports the append as done',
+      r.status === 0 && rowsIn(target).length === 1, `exit ${r.status}: ${(r.stderr ?? '').trim()}`);
+    check('and names the lock it left behind',
+      left && /could not be removed/.test(r.stderr ?? ''),
+      `left ${left}: ${(r.stderr ?? '').trim()}`);
+    rmSync(cleanupLock, { recursive: true, force: true });
+  }
+
+  // AC-009.4 in the failing direction: the write throws, the cleanup throws, and the message must
+  // not claim an entry that was never written. The real filesystem will not fail both on demand, so
+  // the script runs verbatim against a shimmed `node:fs`.
+  const shimDir = mkdtempSync(join(tmpdir(), 'route-shim-'));
+  writeFileSync(join(shimDir, 'fsshim.mjs'), [
+    "import * as real from 'node:fs';",
+    'export const readFileSync = real.readFileSync;',
+    'export const existsSync = real.existsSync;',
+    'export const mkdirSync = real.mkdirSync;',
+    'export const statSync = real.statSync;',
+    'export const openSync = real.openSync;',
+    'export const closeSync = real.closeSync;',
+    "export function appendFileSync() { const e = new Error('ENOSPC'); e.code = 'ENOSPC'; throw e; }",
+    "export function rmSync() { const e = new Error('EPERM'); e.code = 'EPERM'; throw e; }",
+  ].join('\n'));
+  const shipped = readFileSync(history, 'utf8');
+  const fsImport = /^import \{([^}]*)\} from 'node:fs';$/m;
+  check('the script imports node:fs in one statement the shim can stand in for',
+    fsImport.test(shipped), 'no single node:fs import found');
+  // A shim that is missing a name the script imports fails as an undefined call somewhere else, so
+  // the two are compared here rather than left to drift.
+  const shimSource = readFileSync(join(shimDir, 'fsshim.mjs'), 'utf8');
+  const imported = (fsImport.exec(shipped)?.[1] ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  const missing = imported.filter((name) => !new RegExp(`export (const|function) ${name}\\b`).test(shimSource));
+  check('the shim exports every name the script imports from node:fs',
+    imported.length > 0 && missing.length === 0, `missing: ${missing.join(', ')}`);
+  writeFileSync(join(shimDir, 'route-history.mjs'),
+    shipped.replace(fsImport, "import {$1} from './fsshim.mjs';"));
+  const shimmed = spawnSync(process.execPath,
+    [join(shimDir, 'route-history.mjs'), 'append', '--event', 'cycle.planned', '--model', 'test',
+      '--file', join(shimDir, 'h.jsonl')], { encoding: 'utf8', timeout: LOCK_DEADLINE_MS * 2 });
+  check('a write that fails is not reported as an entry that was written',
+    shimmed.status !== 0 && !/the entry was written/.test(shimmed.stderr ?? ''),
+    `exit ${shimmed.status}: ${(shimmed.stderr ?? '').split('\n')[0]}`);
+  check('and the lock it could not remove is still named',
+    /could not be removed \(EPERM\)/.test(shimmed.stderr ?? ''), (shimmed.stderr ?? '').trim());
+  const shimLog = join(shimDir, 'h.jsonl');
+  check('no entry was written',
+    !existsSync(shimLog) || readFileSync(shimLog, 'utf8').trim() === '',
+    JSON.stringify(existsSync(shimLog) ? readFileSync(shimLog, 'utf8') : null));
+  rmSync(shimDir, { recursive: true, force: true });
+
+  rmSync(dir, { recursive: true, force: true });
 }
 
 const failed = results.filter((r) => !r.ok);

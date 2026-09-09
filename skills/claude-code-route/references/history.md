@@ -82,9 +82,17 @@ records a late moment honestly, and the log then says the appends were batched r
 
 The script takes a lock for the duration of an append, because an append is read-then-write: it
 reads the last entry's hash and writes a new line linked to it. Two agents appending at the same
-instant without a lock produce duplicate sequence numbers and a chain that no longer verifies. The
-lock is a directory beside the log, held for milliseconds, and reclaimed automatically after thirty
-seconds if the process holding it died.
+instant without a lock produce duplicate sequence numbers and a chain that no longer verifies.
+
+The lock is a directory beside the log, held for milliseconds. It is never reclaimed on a writer's
+behalf: nothing can tell a dead holder from a slow one, and taking a lock away from a live holder
+puts two writers in the file. A lock left behind by a crash makes the next append wait ten seconds
+and then name the directory to remove. Those ten seconds bound contention, not the filesystem: the
+wait is measured around a synchronous call that has to return first, so an acquisition that blocks --
+an unresponsive share, a drive that stops answering -- never reaches the deadline.
+
+It guards the path it is written beside. Address one log by two paths and each gets a lock of its
+own, so both writers append and the chain breaks. Give a history file one path.
 
 ## The chain
 

@@ -6,6 +6,120 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-12
+
+The lock stops promising what it cannot hold, the receipts 1.1.3 produced about itself, and two
+limits named as the host's rather than left as this plugin's.
+
+**Why this is 2.0.0 and not 1.2.0.** Version 1.1.3's shipped reference told operators that a lock is
+"reclaimed automatically after thirty seconds". This release removes that, on purpose: reclaiming a
+lock cannot tell a dead holder from a slow one, and it took locks away from live writers. But an
+automation written against the documented behaviour will now wait out ten seconds and stop instead of
+recovering on its own, and that is a break whatever the reason for it. Round 25 found the removal
+sitting in a minor version under a changelog that declares Semantic Versioning.
+
+### Added
+
+- **`ROUTE_LOCK_FAULT` makes a lock acquisition fail on purpose.** AC-009 — AC-005.2 when it was written — asked that reintroducing
+  the Windows lock defect make the job fail, and the race it rides on was measured at about one writer
+  in 250 — a green run and a run with the handling removed look the same. The acquisition can now be
+  made to fail with a chosen code, so the branch is driven rather than waited for; `<code>:always`
+  makes every acquisition fail. Every claim the lock makes is
+removed in turn against 230 passing checks, and each removal fails only what it should, at the
+  counts the receipt lists: narrowing the held set to EEXIST at 221/230, removing the guard that
+  lets an unexpected code surface at 227/230, putting the deadline back on the wall clock at
+  229/230, leaving the cleanup unguarded at 227/230, moving the lock off the path it guards at
+  227/230, removing the separator that keeps an entry on a line of its own at 228/230, claiming a
+  write before it happened at 229/230. What the lock does not do is written in the plan with the
+  round that measured it, not asserted. The criterion was waived for eleven rounds; it is
+  closed by execution.
+- `HISTORY.jsonl` carries round 19's verdict against the revision it read and 1.1.3's delivery. A
+  release produces facts about itself that cannot be written into the commit they describe; they land
+  in the next one.
+
+### Removed
+
+- **The lock no longer decides that another process has died** *(breaking: 1.1.3 documented the
+  opposite)*. A lock directory older than thirty seconds was deleted and the wait restarted. mtime cannot tell a dead holder from a slow one, so an
+  append that ran longer than the window had its lock removed underneath it and a second writer
+  entered the file; the deletion was unguarded, so a lock that could not be removed surfaced as an
+  uncaught `EPERM`; and the restart skipped the deadline, so a lock that kept looking stale was
+  waited on forever. A lock left by a crash now stays until it is removed by hand, which is what the
+  message the command prints has always said to do.
+
+### Known
+
+Rounds 27 to 30 attacked what `route-history` trusts about what it reads and writes, and found
+thirty-eight things across four rounds. Every one was confirmed by executing its verification step.
+Repairing them inside this release was costing more than it returned -- each round's repairs were
+where the next round found most of its own findings, and three of them broke what 1.1.3 does
+correctly -- so the script here is the one round 27 reviewed, and these are open. The plan carries
+each with the round that measured it.
+
+- A log is extended past a line this script cannot use: one that fails to parse, or one that parses
+  into something that is not an entry. `42` is valid JSON. The append exits 0 and `verify` then
+  reports a break.
+- Values the fields cannot hold are recorded: a timestamp that is not one, a day the calendar does
+  not have, a count that is not a number, a negative count, and a number too large to record.
+- An option present with no value falls back to its default, so `append --file --event ...` writes
+  the default history into the working directory.
+- A write that fails after its bytes have landed leaves the entry and reports a failure; a caller
+  that retries writes it twice, and the chain verifies both.
+- A directory that will not allow the lock is reported, after ten seconds, as another append in
+  progress.
+- No check keeps a shell example runnable. The five that rounds 21 and 22 found are repaired here.
+
+### Fixed
+
+- **An append could corrupt a history that `verify` had just accepted.** A log whose last line has no
+  trailing newline — an editor that trims the file, a copy-paste, a tool that rewrites it — is parsed
+  correctly and passes `verify`. The append then wrote its entry straight onto that line, putting two
+  JSON objects on one physical line: the entry was lost, the chain broke, and the command that broke
+  it exited 0. Measured: `verify` 0 breaks, append exit 0, `verify` 1 break. The write is separated
+  now, and the suite drives the case. This line is unchanged in 1.0.0, 1.1.0, 1.1.1 and 1.1.3, so it
+  is not a regression of this release but a defect every release has carried.
+- **An append could spin forever instead of giving up.** A lock acquisition that failed with a code
+  meaning the lock is held, in a place where the lock could not then be read — a directory that denies
+  both operations — restarted the wait loop without passing the deadline, so the process never exited
+  and never wrote. Measured against `C:\Windows\System32`: the append ran past the ten-second timeout
+  and had to be killed at twelve seconds. It now exits 3 at the deadline like any other held lock.
+- **The ten-second wait was measured on the wall clock**, so a clock that stalls or steps back
+  extended it without bound. It is monotonic now, and the suite drives it with `Date.now` frozen.
+- **Five shell examples were not runnable as written**, in `SECURITY.md`, `docs/route/README.md` and
+  three places in the skill: bash reads an unquoted `<placeholder>` as a redirect, so
+  `--slug <plan slug>` tried to read a file called `plan` and stopped there. The placeholders are
+  quoted. Nothing yet stops the class returning: three rounds tried to build a check for it and each
+  found the previous attempt flagging commands that run, so it is recorded as open rather than
+  shipped half working.
+- **A check meant to catch a silently lost append passed when one was lost.** It read
+  `rows.length === WRITERS || exitCodes.every(...)`, and the second alternative is true whenever no
+  writer failed. Comparing totals instead was not enough either — twelve rows from twelve successes
+  can hold one writer twice and another not at all — so every writer that succeeded is now looked
+  for in the file, once.
+- **The lock message names the log as well as the directory to remove.** The lock still guards a
+  path: one log addressed by two paths — a hard link, a symlink, a mapped drive — has two locks and
+  both writers append. Round 23 named the lock after the file's device and inode to close that, which
+  left one inode reached from two directories still holding two locks and required creating the log
+  before the lock was taken; round 24 measured both. A history file is addressed by one path, and the
+  plan says so rather than promising what the code does not do.
+- **A cleanup failure claimed a write that had not happened.** The message added one release earlier,
+  to stop a written entry being reported as lost, ran from a `finally` block that is reached whether
+  the append returned or threw. It now says only what happened.
+- `references/history.md` still promised that a lock is reclaimed automatically after thirty
+  seconds. Nothing has done that since this release removed it.
+
+### Changed
+
+- The plan names two things as limits of Claude Code rather than of this plugin, both measured. The
+  marketplace installs from the default branch and offers no way to ask for a tag, which is why every
+  commit pushed there is a publication — and why 1.1.2's defect, which was not the host's, reached
+  anyone who installed during that window. `claude plugin eval` is in early access on this account, so
+  the three eval cases are measured by hand.
+- The plan says what 1.1.3 shipped with: round 19 reviewed `7fb2b7b`, the tag points at `b19f7d8`,
+  and eight of that round's nine repairs reached it. The ninth, a stale count of commit headers, is
+  repaired here — the phrase wraps across two lines and the search that looked for it read one line at
+  a time.
+
 ## [1.1.3] - 2026-09-08
 
 The sixth round found three things in 1.1.2, all confirmed by executing their verification steps and
@@ -49,10 +163,19 @@ all three BLOCKER. Two of them are about how that release was published rather t
   this method exists to enforce, claimed as kept where it was not, in the document that introduces the
   method. Both statements now carry figures counted from the Verified column.
 
-## [1.1.2] - 2026-09-05
+## [1.1.2] - 2026-09-06 — WITHDRAWN
+
+**This version was withdrawn on 2026-09-08.** It named two published trees: commit
+`3fb532b` declared 1.1.2 and was the default branch from 2026-09-05T03:05:24+02:00 to
+2026-09-06T15:34:23+02:00, and `53f2e77` declares the same version, differs from it in three
+files, and is not descended from it. An install during that window received a different
+1.1.2. Its tag is deleted, so the version now names no tree rather than two; `53f2e77`
+remains reachable from the default branch and re-tagging it would restore what was there.
+Its tag object also carried a finding count written from memory. Use 1.1.3 or later.
 
 Five adversarial rounds, run against 1.1.1 and against each repair of it in turn. **Thirty-five
-findings, thirty-four confirmed by executing their verification steps and one refuted by its own.**
+findings: thirty confirmed by executing their verification steps, four by reading, and one refuted
+by its own.**
 Seventeen were marked BLOCKER, sixteen of them confirmed. The tag for this release was cut while a
 sixth round was still running, so the tagged commit itself was reviewed after it was tagged, not
 before; and this release's own commit message and tag object carry a finding count that was written

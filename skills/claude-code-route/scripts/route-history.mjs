@@ -26,7 +26,7 @@ const REQUIRED_NODE_MAJOR = 18;
   }
 }
 
-import { readFileSync, appendFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { readFileSync, appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -121,7 +121,6 @@ const prune = (o) => {
 // An append is read-then-write: the previous hash has to be the one on disk. mkdir is
 // atomic on every platform this runs on, so the lock directory is the whole mechanism.
 const LOCK_TIMEOUT_MS = 10000;
-const LOCK_STALE_MS = 30000;
 
 // What "somebody else holds it" looks like. POSIX says EEXIST. Windows raises EPERM, and
 // sometimes EACCES, when the directory is being created or removed by another process at
@@ -130,38 +129,69 @@ const LOCK_STALE_MS = 30000;
 // where the contract promises 3.
 const LOCK_HELD = new Set(['EEXIST', 'EPERM', 'EACCES']);
 
+// The race above appeared about once in 250 writers, which is not something a green matrix proves:
+// a run that does not hit it looks exactly like a run where the handling is gone. `ROUTE_LOCK_FAULT`
+// makes an acquisition fail with the code it names, so the branch is driven rather than
+// waited for. `<code>` faults once and `<code>:always` faults every time, which is what drives
+// the other half: a failure that never clears has to reach the deadline and exit 3, not spin.
+// It does nothing unless set, and nothing but the suite sets it. (REQ-009)
+const [LOCK_FAULT, LOCK_FAULT_MODE] = (process.env.ROUTE_LOCK_FAULT ?? '').split(':');
+
+// This lock waits and then gives up. It does not decide that another process has died and take its
+// lock away: nothing can tell a dead holder from a slow one, and taking a lock from a live holder
+// puts two writers in one file. A lock left by a crash is cleared by whoever reads the message
+// below.
+//
+// It guards a path, not a file. One log reached by two paths -- a hard link, a symlink, a mapped
+// drive -- has two locks and both writers enter: a lock beside the file cannot be shared by names
+// in different directories, and moving it away from the file to a fixed place trades that for a
+// lock nobody can see next to the log it holds. A history file is addressed by one path. (REQ-009,
+// AC-009.5)
 function withLock(target, fn) {
   const lock = `${target}.lock`;
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  // Monotonic. A wall clock that steps back or stalls extends this deadline without bound, and a
+  // command that never returns is worse than one that gives up. (REQ-009, AC-009.3)
+  const deadline = performance.now() + LOCK_TIMEOUT_MS;
+  let faulted = false;
 
   for (;;) {
     try {
+      if (LOCK_FAULT && !(faulted && LOCK_FAULT_MODE !== 'always')) {
+        faulted = true;
+        const injected = new Error(`injected ${LOCK_FAULT} on lock acquisition`);
+        injected.code = LOCK_FAULT;
+        throw injected;
+      }
       mkdirSync(lock);
       break;
     } catch (err) {
       if (!LOCK_HELD.has(err.code)) throw err;
-      // A lock older than the stale window belongs to a process that died holding it.
-      try {
-        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) {
-          rmSync(lock, { recursive: true, force: true });
-          continue;
-        }
-      } catch {
-        continue;
-      }
-      if (Date.now() > deadline) {
+      if (performance.now() > deadline) {
         process.stderr.write(
-          `route-history: ${lock} is held; another append is in progress. Retry, or remove it if no process holds it.\n`);
+          `route-history: ${target} is locked by ${lock}; another append is in progress. `
+          + 'Retry, or remove that directory if no process holds it.\n');
         process.exit(3);
       }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
 
+  let wrote = false;
   try {
-    return fn();
+    const result = fn();
+    wrote = true;
+    return result;
   } finally {
-    rmSync(lock, { recursive: true, force: true });
+    try {
+      rmSync(lock, { recursive: true, force: true });
+    } catch (err) {
+      // A cleanup that fails after the entry is on disk must not report a written entry as lost, or
+      // a caller that retries writes it twice. It must not claim a write that did not happen
+      // either: `finally` runs on both paths. (AC-009.4)
+      process.stderr.write(
+        `route-history: ${wrote ? 'the entry was written, but ' : ''}${lock} could not be removed `
+        + `(${err.code}). Remove it if no process holds it.\n`);
+    }
   }
 }
 
@@ -218,7 +248,9 @@ function appendUnderLock(event, model) {
 
   entry.hash = digest(entry);
 
-  appendFileSync(file, JSON.stringify(entry) + '\n', 'utf8');
+  const last = existsSync(file) ? readFileSync(file, 'utf8').slice(-1) : '';
+  const separator = last === '' || last === '\n' ? '' : '\n';
+  appendFileSync(file, `${separator}${JSON.stringify(entry)}\n`, 'utf8');
   process.stdout.write(`${file}: #${entry.seq} ${entry.event} ${entry.ts}\n`);
 }
 
